@@ -14,8 +14,9 @@ import {
   BarElement
 } from 'chart.js';
 import { Heart, Music, Zap, Mic2, Volume2, Headphones, Info, Database } from 'lucide-react';
-import { getTrackInfo, interpretAudioFeatures } from '../services/spotifyService';
-import { extractSpotifyIdFromUri } from '../utils/spotifyUtils';
+import { analyzeStreamingHistory } from '../services/spotifyDataAnalyzer';
+import { interpretAudioFeatures } from '../services/spotifyApiService';
+import { isAuthenticated } from '../services/spotifyAuthService';
 
 // Register ChartJS components
 ChartJS.register(
@@ -42,15 +43,13 @@ interface TrackLikabilityInfo {
   likabilityScore: number;
   audioFeatures: any;
   genres: string[];
-  source: string;
-  spotifyId?: string | null;
 }
 
 const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
-  const [trackAnalysis, setTrackAnalysis] = useState<TrackLikabilityInfo[]>([]);
+  const [analyzedData, setAnalyzedData] = useState<any>(null);
   const [selectedTrack, setSelectedTrack] = useState<TrackLikabilityInfo | null>(null);
   const [averageFeatures, setAverageFeatures] = useState<any>(null);
   const [likabilityDistribution, setLikabilityDistribution] = useState<{
@@ -70,6 +69,9 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
     unknown: 0
   });
 
+  // Check if connected to Spotify
+  const spotifyConnected = isAuthenticated();
+
   useEffect(() => {
     if (rawData && rawData.length > 0) {
       processData();
@@ -82,120 +84,67 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
     setProgress(0);
     
     try {
-      // Count plays by track and artist
-      const trackArtistCounts: Record<string, { artist: string; track: string; count: number; spotifyId?: string | null }> = {};
+      // Initial progress
+      setProgress(5);
       
-      rawData.forEach(item => {
-        const artist = item.master_metadata_album_artist_name;
-        const track = item.master_metadata_track_name;
+      // Analyze the streaming history
+      const analysis = await analyzeStreamingHistory(rawData, spotifyConnected);
+      
+      // Progress update
+      setProgress(70);
+      
+      // Store the analyzed data
+      setAnalyzedData(analysis);
+      
+      // Extract track data for likability analysis
+      if (analysis.analyzedTracks && analysis.analyzedTracks.length > 0) {
+        // Calculate average audio features
+        calculateAverageFeatures(analysis.analyzedTracks);
         
-        if (artist && track) {
-          const key = `${artist}:${track}`.toLowerCase();
-          
-          if (!trackArtistCounts[key]) {
-            // Extract Spotify ID from URI if available
-            let spotifyId = null;
-            if (item.spotify_track_uri) {
-              spotifyId = extractSpotifyIdFromUri(item.spotify_track_uri);
-            }
-            
-            trackArtistCounts[key] = { 
-              artist, 
-              track, 
-              count: 0,
-              spotifyId
-            };
+        // Calculate likability distribution
+        calculateLikabilityDistribution(analysis.analyzedTracks);
+        
+        // Count API sources
+        const apiCounts = {
+          spotify: 0,
+          mock: 0,
+          unknown: 0
+        };
+        
+        analysis.analyzedTracks.forEach((track: any) => {
+          if (track.audioFeatures) {
+            apiCounts.spotify++;
+          } else if (track.likabilityScore > 0) {
+            apiCounts.mock++;
+          } else {
+            apiCounts.unknown++;
           }
+        });
+        
+        setApiInfo(apiCounts);
+        
+        // Set the default selected track to the one with highest likability
+        if (analysis.analyzedTracks.length > 0) {
+          const highestLikabilityTrack = [...analysis.analyzedTracks]
+            .sort((a, b) => b.likabilityScore - a.likabilityScore)[0];
           
-          trackArtistCounts[key].count += 1;
+          setSelectedTrack(highestLikabilityTrack);
         }
-      });
-      
-      // Convert to array and sort by play count
-      const sortedTracks = Object.values(trackArtistCounts)
-        .sort((a, b) => b.count - a.count);
-      
-      // Get top 50 tracks for analysis
-      const topTracks = sortedTracks.slice(0, 50);
-      const totalTracks = topTracks.length;
-      
-      // Process tracks in smaller batches to show incremental progress
-      const batchSize = 5;
-      const analysisResults: TrackLikabilityInfo[] = [];
-      const apiCounts = { spotify: 0, mock: 0, unknown: 0 };
-      
-      for (let i = 0; i < topTracks.length; i += batchSize) {
-        const batchTracks = topTracks.slice(i, Math.min(i + batchSize, topTracks.length));
-        
-        // Process each track in the batch
-        for (let j = 0; j < batchTracks.length; j++) {
-          const { artist, track, count, spotifyId } = batchTracks[j];
-          
-          try {
-            // Get track info from Spotify API, prioritizing the Spotify ID if available
-            const analysis = await getTrackInfo(artist, track, spotifyId);
-            
-            if (analysis && analysis.audioFeatures) {
-              analysisResults.push({
-                artist,
-                track,
-                count,
-                likabilityScore: analysis.likabilityScore,
-                audioFeatures: analysis.audioFeatures,
-                genres: analysis.genres,
-                source: analysis.source,
-                spotifyId
-              });
-              
-              // Count API sources
-              apiCounts[analysis.source as keyof typeof apiCounts]++;
-            } else {
-              console.log(`No analysis data for ${artist} - ${track}`);
-            }
-          } catch (error) {
-            console.error(`Error analyzing track ${artist} - ${track}:`, error);
-          }
-        }
-        
-        // Update progress after each batch
-        const processedCount = Math.min(i + batchSize, totalTracks);
-        const progressPercent = Math.round((processedCount / totalTracks) * 100);
-        setProgress(progressPercent);
-        
-        // Update UI with partial results
-        if (analysisResults.length > 0 && analysisResults.length % (batchSize * 2) === 0) {
-          setTrackAnalysis([...analysisResults]);
-          calculateAverageFeatures([...analysisResults]);
-          calculateLikabilityDistribution([...analysisResults]);
-          setApiInfo({...apiCounts});
-        }
-        
-        // Small delay to allow UI to update
-        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
-      // Final update with all results
-      setTrackAnalysis(analysisResults);
-      calculateAverageFeatures(analysisResults);
-      calculateLikabilityDistribution(analysisResults);
-      setApiInfo(apiCounts);
-      
-      // Set the default selected track to the one with highest likability
-      if (analysisResults.length > 0) {
-        const highestLikabilityTrack = [...analysisResults].sort((a, b) => b.likabilityScore - a.likabilityScore)[0];
-        setSelectedTrack(highestLikabilityTrack);
-      }
+      // Complete progress
+      setProgress(100);
     } catch (error) {
       console.error('Error processing data:', error);
+      setProgress(100);
     } finally {
       setIsLoading(false);
       setIsAnalyzing(false);
-      setProgress(100);
     }
   };
 
   const calculateAverageFeatures = (tracks: TrackLikabilityInfo[]) => {
-    if (tracks.length === 0) return;
+    if (!tracks || tracks.length === 0) return;
     
     const features = [
       'danceability', 'energy', 'speechiness', 
@@ -207,22 +156,28 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
       sums[feature] = 0;
     });
     
+    let validTracksCount = 0;
+    
     tracks.forEach(track => {
-      features.forEach(feature => {
-        sums[feature] += track.audioFeatures[feature];
-      });
+      if (track.audioFeatures) {
+        validTracksCount++;
+        features.forEach(feature => {
+          sums[feature] += track.audioFeatures[feature] || 0;
+        });
+      }
     });
     
     const averages: Record<string, number> = {};
     features.forEach(feature => {
-      averages[feature] = parseFloat((sums[feature] / tracks.length).toFixed(3));
+      averages[feature] = validTracksCount > 0 ? 
+        parseFloat((sums[feature] / validTracksCount).toFixed(3)) : 0;
     });
     
     setAverageFeatures(averages);
   };
 
   const calculateLikabilityDistribution = (tracks: TrackLikabilityInfo[]) => {
-    if (tracks.length === 0) return;
+    if (!tracks || tracks.length === 0) return;
     
     // Create bins for likability scores
     const bins = [
@@ -234,8 +189,10 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
     
     tracks.forEach(track => {
       const score = track.likabilityScore;
-      const binIndex = Math.min(Math.floor(score / 10), 9);
-      counts[binIndex]++;
+      if (score >= 0 && score <= 100) {
+        const binIndex = Math.min(Math.floor(score / 10), 9);
+        counts[binIndex]++;
+      }
     });
     
     setLikabilityDistribution({
@@ -246,6 +203,13 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
 
   // Prepare radar chart data for audio features
   const prepareRadarData = (track: TrackLikabilityInfo) => {
+    if (!track.audioFeatures || !averageFeatures) {
+      return {
+        labels: [],
+        datasets: []
+      };
+    }
+    
     return {
       labels: [
         'Danceability', 'Energy', 'Speechiness', 
@@ -255,13 +219,13 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
         {
           label: 'Selected Track',
           data: [
-            track.audioFeatures.danceability,
-            track.audioFeatures.energy,
-            track.audioFeatures.speechiness,
-            track.audioFeatures.acousticness,
-            track.audioFeatures.instrumentalness,
-            track.audioFeatures.liveness,
-            track.audioFeatures.valence
+            track.audioFeatures.danceability || 0,
+            track.audioFeatures.energy || 0,
+            track.audioFeatures.speechiness || 0,
+            track.audioFeatures.acousticness || 0,
+            track.audioFeatures.instrumentalness || 0,
+            track.audioFeatures.liveness || 0,
+            track.audioFeatures.valence || 0
           ],
           backgroundColor: 'rgba(255, 99, 132, 0.2)',
           borderColor: 'rgba(255, 99, 132, 1)',
@@ -438,7 +402,7 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
     }
   };
 
-  if (isLoading && !trackAnalysis.length) {
+  if (isLoading && !analyzedData) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-green-500 mb-4"></div>
@@ -495,10 +459,10 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
         <div className="bg-gray-700 rounded-lg p-6 shadow-lg">
           <h3 className="text-xl font-bold mb-4">Top Tracks by Likability</h3>
           <div className="max-h-64 overflow-y-auto pr-2">
-            {trackAnalysis
-              .sort((a, b) => b.likabilityScore - a.likabilityScore)
+            {analyzedData?.analyzedTracks
+              ?.sort((a: any, b: any) => b.likabilityScore - a.likabilityScore)
               .slice(0, 10)
-              .map((track, index) => (
+              .map((track: any, index: number) => (
                 <button
                   key={index}
                   onClick={() => setSelectedTrack(track)}
@@ -514,7 +478,7 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
                     </div>
                     <div className="ml-auto pl-3">
                       <span className={`text-lg font-bold ${getLikabilityColor(track.likabilityScore)}`}>
-                        {track.likabilityScore}
+                        {track.likabilityScore.toFixed(1)}
                       </span>
                     </div>
                   </div>
@@ -533,23 +497,23 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
               <div className="flex items-center mt-2">
                 <div className={`px-3 py-1 rounded-full ${getLikabilityBg(selectedTrack.likabilityScore)} text-white font-medium flex items-center`}>
                   <Heart className="h-4 w-4 mr-1" />
-                  <span>{selectedTrack.likabilityScore} - {getLikabilityDescription(selectedTrack.likabilityScore)}</span>
+                  <span>{selectedTrack.likabilityScore.toFixed(1)} - {getLikabilityDescription(selectedTrack.likabilityScore)}</span>
                 </div>
                 <span className="ml-3 text-gray-400 text-sm">{selectedTrack.count} plays</span>
-                {selectedTrack.source === 'mock' && (
-                  <span className="ml-3 text-yellow-400 text-xs">(Generated data)</span>
-                )}
               </div>
             </div>
             
             <div className="mt-4 lg:mt-0">
               <h4 className="font-medium mb-2">Genres</h4>
               <div className="flex flex-wrap gap-2">
-                {selectedTrack.genres.map((genre, index) => (
+                {selectedTrack.genres && selectedTrack.genres.map((genre: string, index: number) => (
                   <span key={index} className="bg-gray-600 px-2 py-1 rounded-full text-sm">
                     {genre}
                   </span>
                 ))}
+                {(!selectedTrack.genres || selectedTrack.genres.length === 0) && (
+                  <span className="bg-gray-600 px-2 py-1 rounded-full text-sm">Unknown Genre</span>
+                )}
               </div>
             </div>
           </div>
@@ -558,101 +522,110 @@ const LikabilityStats: React.FC<LikabilityStatsProps> = ({ rawData }) => {
             <div>
               <h4 className="font-medium mb-4">Audio Features</h4>
               <div className="h-64">
-                <Radar data={prepareRadarData(selectedTrack)} options={radarOptions} />
+                {selectedTrack.audioFeatures && (
+                  <Radar data={prepareRadarData(selectedTrack)} options={radarOptions} />
+                )}
+                {!selectedTrack.audioFeatures && (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-gray-400">No audio feature data available</p>
+                  </div>
+                )}
               </div>
             </div>
             
             <div>
               <h4 className="font-medium mb-4">Feature Analysis</h4>
-              <div className="space-y-4">
-                {selectedTrack.audioFeatures && (
-                  <>
-                    <div className="flex items-center">
-                      <div className="bg-pink-500 bg-opacity-20 p-2 rounded-lg mr-3">
-                        <Music className="h-5 w-5 text-pink-400" />
+              {selectedTrack.audioFeatures ? (
+                <div className="space-y-4">
+                  <div className="flex items-center">
+                    <div className="bg-pink-500 bg-opacity-20 p-2 rounded-lg mr-3">
+                      <Music className="h-5 w-5 text-pink-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-1">
+                        <span className="font-medium">Danceability</span>
+                        <span className="text-gray-400 text-sm">{(selectedTrack.audioFeatures.danceability * 100).toFixed(0)}%</span>
                       </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between mb-1">
-                          <span className="font-medium">Danceability</span>
-                          <span className="text-gray-400 text-sm">{(selectedTrack.audioFeatures.danceability * 100).toFixed(0)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2">
-                          <div 
-                            className="bg-pink-500 h-2 rounded-full"
-                            style={{ width: `${selectedTrack.audioFeatures.danceability * 100}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          {interpretAudioFeatures(selectedTrack.audioFeatures).danceability}
-                        </div>
+                      <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div 
+                          className="bg-pink-500 h-2 rounded-full"
+                          style={{ width: `${selectedTrack.audioFeatures.danceability * 100}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {interpretAudioFeatures(selectedTrack.audioFeatures).danceability}
                       </div>
                     </div>
-                    
-                    <div className="flex items-center">
-                      <div className="bg-yellow-500 bg-opacity-20 p-2 rounded-lg mr-3">
-                        <Zap className="h-5 w-5 text-yellow-400" />
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <div className="bg-yellow-500 bg-opacity-20 p-2 rounded-lg mr-3">
+                      <Zap className="h-5 w-5 text-yellow-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-1">
+                        <span className="font-medium">Energy</span>
+                        <span className="text-gray-400 text-sm">{(selectedTrack.audioFeatures.energy * 100).toFixed(0)}%</span>
                       </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between mb-1">
-                          <span className="font-medium">Energy</span>
-                          <span className="text-gray-400 text-sm">{(selectedTrack.audioFeatures.energy * 100).toFixed(0)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2">
-                          <div 
-                            className="bg-yellow-500 h-2 rounded-full"
-                            style={{ width: `${selectedTrack.audioFeatures.energy * 100}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          {interpretAudioFeatures(selectedTrack.audioFeatures).energy}
-                        </div>
+                      <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div 
+                          className="bg-yellow-500 h-2 rounded-full"
+                          style={{ width: `${selectedTrack.audioFeatures.energy * 100}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {interpretAudioFeatures(selectedTrack.audioFeatures).energy}
                       </div>
                     </div>
-                    
-                    <div className="flex items-center">
-                      <div className="bg-green-500 bg-opacity-20 p-2 rounded-lg mr-3">
-                        <Heart className="h-5 w-5 text-green-400" />
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <div className="bg-green-500 bg-opacity-20 p-2 rounded-lg mr-3">
+                      <Heart className="h-5 w-5 text-green-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-1">
+                        <span className="font-medium">Valence (Positivity)</span>
+                        <span className="text-gray-400 text-sm">{(selectedTrack.audioFeatures.valence * 100).toFixed(0)}%</span>
                       </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between mb-1">
-                          <span className="font-medium">Valence (Positivity)</span>
-                          <span className="text-gray-400 text-sm">{(selectedTrack.audioFeatures.valence * 100).toFixed(0)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2">
-                          <div 
-                            className="bg-green-500 h-2 rounded-full"
-                            style={{ width: `${selectedTrack.audioFeatures.valence * 100}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          {interpretAudioFeatures(selectedTrack.audioFeatures).valence}
-                        </div>
+                      <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div 
+                          className="bg-green-500 h-2 rounded-full"
+                          style={{ width: `${selectedTrack.audioFeatures.valence * 100}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {interpretAudioFeatures(selectedTrack.audioFeatures).valence}
                       </div>
                     </div>
-                    
-                    <div className="flex items-center">
-                      <div className="bg-blue-500 bg-opacity-20 p-2 rounded-lg mr-3">
-                        <Mic2 className="h-5 w-5 text-blue-400" />
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <div className="bg-blue-500 bg-opacity-20 p-2 rounded-lg mr-3">
+                      <Mic2 className="h-5 w-5 text-blue-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-1">
+                        <span className="font-medium">Acousticness</span>
+                        <span className="text-gray-400 text-sm">{(selectedTrack.audioFeatures.acousticness * 100).toFixed(0)}%</span>
                       </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between mb-1">
-                          <span className="font-medium">Acousticness</span>
-                          <span className="text-gray-400 text-sm">{(selectedTrack.audioFeatures.acousticness * 100).toFixed(0)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2">
-                          <div 
-                            className="bg-blue-500 h-2 rounded-full"
-                            style={{ width: `${selectedTrack.audioFeatures.acousticness * 100}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          {interpretAudioFeatures(selectedTrack.audioFeatures).acousticness}
-                        </div>
+                      <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div 
+                          className="bg-blue-500 h-2 rounded-full"
+                          style={{ width: `${selectedTrack.audioFeatures.acousticness * 100}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {interpretAudioFeatures(selectedTrack.audioFeatures).acousticness}
                       </div>
                     </div>
-                  </>
-                )}
-              </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-gray-400">No audio feature data available</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

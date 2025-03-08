@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { Buffer } from 'buffer';
 
 // Spotify API endpoints
 const AUTH_ENDPOINT = 'https://accounts.spotify.com/authorize';
@@ -24,10 +23,6 @@ const ACCESS_TOKEN_KEY = 'spotify_access_token';
 const REFRESH_TOKEN_KEY = 'spotify_refresh_token';
 const EXPIRY_TIME_KEY = 'spotify_token_expiry';
 
-// Track API rate limiting
-let lastApiCallTime = 0;
-const API_CALL_DELAY = 1000; // 1 second between API calls to avoid rate limiting
-
 /**
  * Generate the authorization URL for Spotify login
  */
@@ -44,21 +39,6 @@ export const getAuthUrl = (): string => {
 };
 
 /**
- * Delay API calls to avoid rate limiting
- */
-const delayApiCall = async (): Promise<void> => {
-  const now = Date.now();
-  const timeSinceLastCall = now - lastApiCallTime;
-  
-  if (timeSinceLastCall < API_CALL_DELAY) {
-    const delayTime = API_CALL_DELAY - timeSinceLastCall;
-    await new Promise(resolve => setTimeout(resolve, delayTime));
-  }
-  
-  lastApiCallTime = Date.now();
-};
-
-/**
  * Exchange authorization code for access token
  */
 export const getAccessToken = async (code: string): Promise<{
@@ -67,19 +47,19 @@ export const getAccessToken = async (code: string): Promise<{
   expires_in: number;
 }> => {
   try {
-    await delayApiCall();
+    // Form data for token request
+    const formData = new URLSearchParams();
+    formData.append('grant_type', 'authorization_code');
+    formData.append('code', code);
+    formData.append('redirect_uri', REDIRECT_URI);
     
-    // Real implementation with actual API call
-    const params = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: REDIRECT_URI
-    });
-
-    const response = await axios.post(TOKEN_ENDPOINT, params.toString(), {
+    // Basic auth header
+    const auth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+    
+    const response = await axios.post(TOKEN_ENDPOINT, formData, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64')}`
+        'Authorization': `Basic ${auth}`
       }
     });
 
@@ -93,13 +73,7 @@ export const getAccessToken = async (code: string): Promise<{
 
     return response.data;
   } catch (error) {
-    // Safe error logging
-    if (error instanceof Error) {
-      console.error('Error getting access token:', error.message);
-    } else {
-      console.error('Error getting access token: Unknown error');
-    }
-    
+    console.error('Error getting access token:', error);
     throw error;
   }
 };
@@ -109,23 +83,24 @@ export const getAccessToken = async (code: string): Promise<{
  */
 export const refreshAccessToken = async (): Promise<string> => {
   try {
-    await delayApiCall();
-    
     const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
     
     if (!refreshToken) {
       throw new Error('No refresh token available');
     }
 
-    const params = new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken
-    });
-
-    const response = await axios.post(TOKEN_ENDPOINT, params.toString(), {
+    // Form data for token refresh
+    const formData = new URLSearchParams();
+    formData.append('grant_type', 'refresh_token');
+    formData.append('refresh_token', refreshToken);
+    
+    // Basic auth header
+    const auth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+    
+    const response = await axios.post(TOKEN_ENDPOINT, formData, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64')}`
+        'Authorization': `Basic ${auth}`
       }
     });
 
@@ -143,13 +118,7 @@ export const refreshAccessToken = async (): Promise<string> => {
 
     return response.data.access_token;
   } catch (error) {
-    // Safe error logging
-    if (error instanceof Error) {
-      console.error('Error refreshing access token:', error.message);
-    } else {
-      console.error('Error refreshing access token: Unknown error');
-    }
-    
+    console.error('Error refreshing access token:', error);
     throw error;
   }
 };
@@ -179,6 +148,32 @@ export const getCurrentAccessToken = async (): Promise<string> => {
 };
 
 /**
+ * Get client credentials token (for non-user-specific API calls)
+ */
+export const getClientCredentialsToken = async (): Promise<string> => {
+  try {
+    // Form data for client credentials
+    const formData = new URLSearchParams();
+    formData.append('grant_type', 'client_credentials');
+    
+    // Basic auth header
+    const auth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+    
+    const response = await axios.post(TOKEN_ENDPOINT, formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${auth}`
+      }
+    });
+
+    return response.data.access_token;
+  } catch (error) {
+    console.error('Error getting client credentials token:', error);
+    throw error;
+  }
+};
+
+/**
  * Check if user is currently authenticated
  */
 export const isAuthenticated = (): boolean => {
@@ -200,36 +195,4 @@ export const logout = (): void => {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(EXPIRY_TIME_KEY);
-};
-
-/**
- * Get client credentials token (for non-user-specific API calls)
- */
-export const getClientCredentialsToken = async (): Promise<string> => {
-  try {
-    await delayApiCall();
-    
-    // Real implementation with actual API call
-    const params = new URLSearchParams({
-      grant_type: 'client_credentials'
-    });
-
-    const response = await axios.post(TOKEN_ENDPOINT, params.toString(), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64')}`
-      }
-    });
-
-    return response.data.access_token;
-  } catch (error) {
-    // Safe error logging
-    if (error instanceof Error) {
-      console.error('Error getting client credentials token:', error.message);
-    } else {
-      console.error('Error getting client credentials token: Unknown error');
-    }
-    
-    throw error;
-  }
 };

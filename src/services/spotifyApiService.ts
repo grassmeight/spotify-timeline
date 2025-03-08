@@ -1,39 +1,21 @@
 import axios from 'axios';
 import { getCurrentAccessToken, getClientCredentialsToken } from './spotifyAuthService';
-import { getTrackInfo as getSpotifyTrackInfo, getTrackId, getArtistId } from './spotifyApi';
+import { extractSpotifyIdFromUri } from '../utils/spotifyUtils';
 
 // Spotify API base URL
 const API_BASE_URL = 'https://api.spotify.com/v1';
 
 // Create axios instance for Spotify API
-const spotifyApi = axios.create({
+const api = axios.create({
   baseURL: API_BASE_URL
 });
 
-// Add request interceptor to add authorization header
-spotifyApi.interceptors.request.use(async (config) => {
-  try {
-    // Try to get user access token first
-    let token;
-    try {
-      token = await getCurrentAccessToken();
-    } catch (error) {
-      // If user token fails, fall back to client credentials
-      token = await getClientCredentialsToken();
-    }
-    
-    config.headers.Authorization = `Bearer ${token}`;
-    return config;
-  } catch (error) {
-    // Safe error logging
-    if (error instanceof Error) {
-      console.error('Error setting authorization header:', error.message);
-    } else {
-      console.error('Error setting authorization header: Unknown error');
-    }
-    return Promise.reject(error);
-  }
-});
+// Set up cache to minimize API calls
+const cache = {
+  tracks: new Map<string, any>(),
+  artists: new Map<string, any>(),
+  audioFeatures: new Map<string, any>()
+};
 
 // Types for Spotify API responses
 export interface SpotifyUser {
@@ -85,37 +67,299 @@ export interface SpotifyAudioFeatures {
   time_signature: number;
 }
 
-export interface SpotifyPlayHistory {
-  track: SpotifyTrack;
-  played_at: string;
-  context: {
-    type: string;
-    uri: string;
-  } | null;
+export interface TrackAnalysis {
+  track: SpotifyTrack | null;
+  audioFeatures: SpotifyAudioFeatures | null;
+  genres: string[];
+  likabilityScore: number;
 }
 
-// Safe error logging function
-const safeLogError = (message: string, error: unknown): void => {
-  if (error instanceof Error) {
-    console.error(`${message}: ${error.message}`);
-  } else {
-    console.error(`${message}: Unknown error`);
+/**
+ * Make an authenticated request to the Spotify API
+ */
+const makeRequest = async (endpoint: string, method = 'GET', params = {}) => {
+  try {
+    // Try to use user token first, fall back to client credentials
+    let token;
+    try {
+      token = await getCurrentAccessToken();
+    } catch (error) {
+      token = await getClientCredentialsToken();
+    }
+
+    return api({
+      method,
+      url: endpoint,
+      params,
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  } catch (error) {
+    console.error(`Error calling Spotify API (${endpoint}):`, error);
+    throw error;
   }
 };
-
-// API functions
 
 /**
  * Get current user profile
  */
 export const getCurrentUser = async (): Promise<SpotifyUser> => {
   try {
-    // Real implementation with actual API call
-    const response = await spotifyApi.get('/me');
+    const response = await makeRequest('/me');
     return response.data;
   } catch (error) {
-    safeLogError('Error getting current user', error);
+    console.error('Error getting current user:', error);
     throw error;
+  }
+};
+
+/**
+ * Search for a track on Spotify
+ */
+export const searchTrack = async (artist: string, trackName: string) => {
+  const cacheKey = `${artist}:${trackName}`.toLowerCase();
+  
+  if (cache.tracks.has(cacheKey)) {
+    return cache.tracks.get(cacheKey);
+  }
+  
+  try {
+    const response = await makeRequest('/search', 'GET', {
+      q: `artist:${artist} track:${trackName}`,
+      type: 'track',
+      limit: 1
+    });
+    
+    if (response.data.tracks.items.length > 0) {
+      const track = response.data.tracks.items[0];
+      cache.tracks.set(cacheKey, track);
+      return track;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Error searching for track ${artist} - ${trackName}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Get a track by ID
+ */
+export const getTrack = async (trackId: string) => {
+  if (cache.tracks.has(trackId)) {
+    return cache.tracks.get(trackId);
+  }
+  
+  try {
+    const response = await makeRequest(`/tracks/${trackId}`);
+    const track = response.data;
+    cache.tracks.set(trackId, track);
+    return track;
+  } catch (error) {
+    console.error(`Error getting track by ID ${trackId}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Get an artist by ID
+ */
+export const getArtist = async (artistId: string) => {
+  if (cache.artists.has(artistId)) {
+    return cache.artists.get(artistId);
+  }
+  
+  try {
+    const response = await makeRequest(`/artists/${artistId}`);
+    const artist = response.data;
+    cache.artists.set(artistId, artist);
+    return artist;
+  } catch (error) {
+    console.error(`Error getting artist by ID ${artistId}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Get audio features for a track
+ */
+export const getAudioFeatures = async (trackId: string) => {
+  if (cache.audioFeatures.has(trackId)) {
+    return cache.audioFeatures.get(trackId);
+  }
+  
+  try {
+    const response = await makeRequest(`/audio-features/${trackId}`);
+    const features = response.data;
+    cache.audioFeatures.set(trackId, features);
+    return features;
+  } catch (error) {
+    console.error(`Error getting audio features for track ${trackId}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Calculate likability score based on audio features and popularity
+ */
+export const calculateLikabilityScore = (track: any, features: any): number => {
+  // Factors that generally make songs more likable:
+  // - Higher valence (positivity/happiness)
+  // - Moderate danceability
+  // - Moderate energy
+  // - Higher popularity
+  // - Not too much speechiness
+  // - Not too much instrumentalness (for general audience)
+  
+  const valenceScore = features.valence * 25; // 0-25 points
+  const danceabilityScore = (1 - Math.abs(features.danceability - 0.7)) * 15; // 0-15 points
+  const energyScore = (1 - Math.abs(features.energy - 0.65)) * 15; // 0-15 points
+  const popularityScore = (track.popularity / 100) * 25; // 0-25 points
+  const speechinessScore = (1 - features.speechiness) * 10; // 0-10 points
+  const instrumentalnessScore = (1 - features.instrumentalness) * 10; // 0-10 points
+  
+  // Sum all scores and round to 2 decimal places
+  const totalScore = parseFloat((
+    valenceScore + 
+    danceabilityScore + 
+    energyScore + 
+    popularityScore + 
+    speechinessScore + 
+    instrumentalnessScore
+  ).toFixed(2));
+  
+  // Ensure score is between 0-100
+  return Math.min(100, Math.max(0, totalScore));
+};
+
+/**
+ * Interpret audio features into human-readable descriptions
+ */
+export const interpretAudioFeatures = (features: SpotifyAudioFeatures): Record<string, string> => {
+  const interpretations: Record<string, string> = {};
+  
+  // Danceability
+  if (features.danceability > 0.7) {
+    interpretations.danceability = "Very danceable";
+  } else if (features.danceability > 0.4) {
+    interpretations.danceability = "Moderately danceable";
+  } else {
+    interpretations.danceability = "Not very danceable";
+  }
+  
+  // Energy
+  if (features.energy > 0.7) {
+    interpretations.energy = "High energy";
+  } else if (features.energy > 0.4) {
+    interpretations.energy = "Moderate energy";
+  } else {
+    interpretations.energy = "Low energy";
+  }
+  
+  // Valence (happiness)
+  if (features.valence > 0.7) {
+    interpretations.valence = "Very positive/happy";
+  } else if (features.valence > 0.4) {
+    interpretations.valence = "Neutral mood";
+  } else {
+    interpretations.valence = "Negative/sad mood";
+  }
+  
+  // Acousticness
+  if (features.acousticness > 0.7) {
+    interpretations.acousticness = "Highly acoustic";
+  } else if (features.acousticness > 0.4) {
+    interpretations.acousticness = "Partially acoustic";
+  } else {
+    interpretations.acousticness = "Not acoustic";
+  }
+  
+  // Instrumentalness
+  if (features.instrumentalness > 0.5) {
+    interpretations.instrumentalness = "Instrumental";
+  } else {
+    interpretations.instrumentalness = "Vocal";
+  }
+  
+  // Speechiness
+  if (features.speechiness > 0.66) {
+    interpretations.speechiness = "Spoken word";
+  } else if (features.speechiness > 0.33) {
+    interpretations.speechiness = "Speech and music";
+  } else {
+    interpretations.speechiness = "Music, not speech";
+  }
+  
+  // Liveness
+  if (features.liveness > 0.8) {
+    interpretations.liveness = "Live performance";
+  } else {
+    interpretations.liveness = "Studio recording";
+  }
+  
+  // Tempo
+  if (features.tempo > 120) {
+    interpretations.tempo = "Fast tempo";
+  } else if (features.tempo > 76) {
+    interpretations.tempo = "Medium tempo";
+  } else {
+    interpretations.tempo = "Slow tempo";
+  }
+  
+  return interpretations;
+};
+
+/**
+ * Analyze a track to get all its information
+ */
+export const getTrackAnalysis = async (
+  artistName: string, 
+  trackName: string, 
+  spotifyUri?: string | null
+): Promise<TrackAnalysis | null> => {
+  try {
+    let trackId = spotifyUri ? extractSpotifyIdFromUri(spotifyUri) : null;
+    let track;
+    
+    // If we have a track ID, get the track directly
+    if (trackId) {
+      track = await getTrack(trackId);
+    } 
+    // Otherwise, search for the track
+    else {
+      track = await searchTrack(artistName, trackName);
+      trackId = track?.id;
+    }
+    
+    // If we couldn't find the track, return null
+    if (!track || !trackId) {
+      return null;
+    }
+    
+    // Get audio features and artist details in parallel
+    const [audioFeatures, artist] = await Promise.all([
+      getAudioFeatures(trackId),
+      getArtist(track.artists[0].id)
+    ]);
+    
+    if (!audioFeatures || !artist) {
+      return null;
+    }
+    
+    // Calculate likability score
+    const likabilityScore = calculateLikabilityScore(track, audioFeatures);
+    
+    return {
+      track,
+      audioFeatures,
+      genres: artist.genres || [],
+      likabilityScore
+    };
+  } catch (error) {
+    console.error(`Error analyzing track ${artistName} - ${trackName}:`, error);
+    return null;
   }
 };
 
@@ -127,14 +371,14 @@ export const getTopArtists = async (
   limit: number = 50
 ): Promise<SpotifyArtist[]> => {
   try {
-    // Real implementation with actual API call
-    const response = await spotifyApi.get('/me/top/artists', {
-      params: { time_range: timeRange, limit }
+    const response = await makeRequest('/me/top/artists', 'GET', {
+      time_range: timeRange,
+      limit
     });
     return response.data.items;
   } catch (error) {
-    safeLogError('Error getting top artists', error);
-    throw error;
+    console.error('Error getting top artists:', error);
+    return [];
   }
 };
 
@@ -146,189 +390,50 @@ export const getTopTracks = async (
   limit: number = 50
 ): Promise<SpotifyTrack[]> => {
   try {
-    // Real implementation with actual API call
-    const response = await spotifyApi.get('/me/top/tracks', {
-      params: { time_range: timeRange, limit }
+    const response = await makeRequest('/me/top/tracks', 'GET', {
+      time_range: timeRange,
+      limit
     });
     return response.data.items;
   } catch (error) {
-    safeLogError('Error getting top tracks', error);
-    throw error;
+    console.error('Error getting top tracks:', error);
+    return [];
   }
 };
 
 /**
- * Get user's recently played tracks
+ * Analyze multiple tracks at once (batch processing)
  */
-export const getRecentlyPlayed = async (limit: number = 50): Promise<SpotifyPlayHistory[]> => {
-  try {
-    // Real implementation with actual API call
-    const response = await spotifyApi.get('/me/player/recently-played', {
-      params: { limit }
+export const analyzeMultipleTracks = async (
+  tracks: Array<{ artist: string; track: string; uri?: string }>
+): Promise<Record<string, TrackAnalysis>> => {
+  const results: Record<string, TrackAnalysis> = {};
+  
+  // Process in batches to avoid rate limiting
+  const batchSize = 5;
+  for (let i = 0; i < tracks.length; i += batchSize) {
+    const batch = tracks.slice(i, i + batchSize);
+    
+    // Process each batch in parallel
+    const batchPromises = batch.map(async ({ artist, track, uri }) => {
+      try {
+        const analysis = await getTrackAnalysis(artist, track, uri);
+        if (analysis) {
+          const key = `${artist}:${track}`.toLowerCase();
+          results[key] = analysis;
+        }
+      } catch (error) {
+        console.error(`Error processing track ${artist} - ${track}:`, error);
+      }
     });
-    return response.data.items;
-  } catch (error) {
-    safeLogError('Error getting recently played tracks', error);
-    throw error;
-  }
-};
-
-/**
- * Search for tracks
- */
-export const searchTracks = async (query: string, limit: number = 10): Promise<SpotifyTrack[]> => {
-  try {
-    // Real implementation with actual API call
-    const response = await spotifyApi.get('/search', {
-      params: { q: query, type: 'track', limit }
-    });
-    return response.data.tracks.items;
-  } catch (error) {
-    safeLogError('Error searching tracks', error);
-    throw error;
-  }
-};
-
-/**
- * Get audio features for a track
- */
-export const getAudioFeatures = async (trackId: string): Promise<SpotifyAudioFeatures> => {
-  try {
-    // Real implementation with actual API call
-    const response = await spotifyApi.get(`/audio-features/${trackId}`);
-    return response.data;
-  } catch (error) {
-    safeLogError('Error getting audio features', error);
-    throw error;
-  }
-};
-
-/**
- * Get audio features for multiple tracks
- */
-export const getAudioFeaturesForTracks = async (trackIds: string[]): Promise<SpotifyAudioFeatures[]> => {
-  try {
-    // Spotify API limits to 100 IDs per request
-    const chunks = [];
-    for (let i = 0; i < trackIds.length; i += 100) {
-      chunks.push(trackIds.slice(i, i + 100));
+    
+    await Promise.all(batchPromises);
+    
+    // Add a small delay between batches to avoid rate limiting
+    if (i + batchSize < tracks.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    
-    const results = await Promise.all(
-      chunks.map(async (chunk) => {
-        const response = await spotifyApi.get('/audio-features', {
-          params: { ids: chunk.join(',') }
-        });
-        return response.data.audio_features;
-      })
-    );
-    
-    return results.flat();
-  } catch (error) {
-    safeLogError('Error getting audio features for tracks', error);
-    throw error;
   }
-};
-
-/**
- * Get artist information
- */
-export const getArtist = async (artistId: string): Promise<SpotifyArtist> => {
-  try {
-    // Real implementation with actual API call
-    const response = await spotifyApi.get(`/artists/${artistId}`);
-    return response.data;
-  } catch (error) {
-    safeLogError('Error getting artist', error);
-    throw error;
-  }
-};
-
-/**
- * Get track information
- */
-export const getTrack = async (trackId: string): Promise<SpotifyTrack> => {
-  try {
-    // Real implementation with actual API call
-    const response = await spotifyApi.get(`/tracks/${trackId}`);
-    return response.data;
-  } catch (error) {
-    safeLogError('Error getting track', error);
-    throw error;
-  }
-};
-
-/**
- * Search for artist and track to get IDs
- */
-export const searchArtistAndTrack = async (artist: string, track: string): Promise<{
-  artistId?: string;
-  trackId?: string;
-}> => {
-  try {
-    // Get track ID first
-    const trackId = await getTrackId(artist, track);
-    if (!trackId) {
-      return {};
-    }
-    
-    // Get artist ID
-    const artistId = await getArtistId(artist);
-    if (!artistId) {
-      // Try to get artist ID from track
-      const trackData = await getTrack(trackId);
-      return {
-        trackId,
-        artistId: trackData.artists[0].id
-      };
-    }
-    
-    return {
-      trackId,
-      artistId
-    };
-  } catch (error) {
-    safeLogError('Error searching for artist and track', error);
-    return {};
-  }
-};
-
-/**
- * Get track analysis with audio features and artist genres
- */
-export const getTrackAnalysis = async (artist: string, track: string): Promise<{
-  track: SpotifyTrack | null;
-  audioFeatures: SpotifyAudioFeatures | null;
-  genres: string[];
-  likabilityScore: number;
-}> => {
-  try {
-    // Use the optimized track info function
-    const result = await getSpotifyTrackInfo(artist, track);
-    
-    if (result) {
-      return {
-        track: result.track,
-        audioFeatures: result.audioFeatures,
-        genres: result.genres,
-        likabilityScore: result.likabilityScore
-      };
-    }
-    
-    // If the API call fails, return empty data
-    return {
-      track: null,
-      audioFeatures: null,
-      genres: [],
-      likabilityScore: 0
-    };
-  } catch (error) {
-    safeLogError('Error getting track analysis', error);
-    return {
-      track: null,
-      audioFeatures: null,
-      genres: [],
-      likabilityScore: 0
-    };
-  }
+  
+  return results;
 };

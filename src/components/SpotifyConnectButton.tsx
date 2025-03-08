@@ -1,24 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Music, LogIn, LogOut, AlertCircle } from 'lucide-react';
-import { isAuthenticated, logout, getAuthUrl } from '../services/spotifyService';
-import SpotifyWebApi from 'spotify-web-api-node';
+import { isAuthenticated, logout, getAuthUrl } from '../services/spotifyAuthService';
+import { getCurrentUser } from '../services/spotifyApiService';
 
 interface SpotifyConnectButtonProps {
   onConnectionChange?: (connected: boolean) => void;
 }
 
-interface SpotifyUser {
-  id: string;
-  display_name: string;
-  email: string;
-  images: { url: string }[];
-  country: string;
-  product: string;
-}
-
 const SpotifyConnectButton: React.FC<SpotifyConnectButtonProps> = ({ onConnectionChange }) => {
   const [connected, setConnected] = useState<boolean>(false);
-  const [user, setUser] = useState<SpotifyUser | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,23 +27,10 @@ const SpotifyConnectButton: React.FC<SpotifyConnectButtonProps> = ({ onConnectio
       
       if (authenticated) {
         try {
-          // Create a new Spotify API instance
-          const spotifyApi = new SpotifyWebApi({
-            clientId: import.meta.env.VITE_SPOTIFY_CLIENT_ID,
-            clientSecret: import.meta.env.VITE_SPOTIFY_CLIENT_SECRET,
-            redirectUri: import.meta.env.VITE_SPOTIFY_REDIRECT_URI
-          });
-          
-          // Set the access token
-          const accessToken = localStorage.getItem('spotify_access_token');
-          if (accessToken) {
-            spotifyApi.setAccessToken(accessToken);
-            
-            // Get user profile
-            const response = await spotifyApi.getMe();
-            setUser(response.body);
-            if (onConnectionChange) onConnectionChange(true);
-          }
+          // Get user profile
+          const userProfile = await getCurrentUser();
+          setUser(userProfile);
+          if (onConnectionChange) onConnectionChange(true);
         } catch (userError) {
           console.error('Error fetching user profile:', userError);
           // Still consider connected even if profile fetch fails

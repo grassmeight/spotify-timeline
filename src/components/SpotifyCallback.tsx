@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAccessToken } from '../services/spotifyService';
+import { getAccessToken } from '../services/spotifyAuthService';
 
 const SpotifyCallback: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
