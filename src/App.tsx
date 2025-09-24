@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileUp, Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { FileUp, Music, User, ChevronDown, Plus, Trash2, Settings, X } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import FileUploader from './components/FileUploader';
 import SampleData from './data/sampleData';
@@ -15,6 +15,7 @@ import {
   deleteProfile,
   getStorageStats
 } from './services/indexedDBProfileService';
+import ProfileApiSettings from './components/ProfileApiSettings';
 
 // Define the interface for our Spotify stats
 interface SpotifyStats {
@@ -88,6 +89,7 @@ function App() {
   const [newProfileName, setNewProfileName] = useState('');
   const [profiles, setProfiles] = useState<any[]>([]);
   const [storageStats, setStorageStats] = useState<any>(null);
+  const [showApiSettings, setShowApiSettings] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Profile management with multi-profile support
@@ -674,6 +676,14 @@ function App() {
     }
   };
 
+  const handleApiDataUpdated = async () => {
+    // Reload profile data after API sync
+    if (currentProfileId) {
+      await loadProfileData(currentProfileId);
+      await loadProfiles(); // Update profile summary stats
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
       <header className="bg-black bg-opacity-40 p-6 shadow-lg">
@@ -707,15 +717,28 @@ function App() {
                             {(profile.totalTracks || 0).toLocaleString()} tracks
                           </div>
                         </button>
-                        {profiles.length > 1 && (
+                        <div className="flex items-center space-x-1">
                           <button
-                            onClick={() => handleDeleteProfile(profile.id)}
-                            className="ml-2 p-1 text-gray-400 hover:text-red-400 transition-colors"
-                            title="Delete Profile"
+                            onClick={() => {
+                              setCurrentProfileId(profile.id);
+                              setShowApiSettings(true);
+                              setShowProfileDropdown(false);
+                            }}
+                            className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                            title="API Settings"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Settings className="h-4 w-4" />
                           </button>
-                        )}
+                          {profiles.length > 1 && (
+                            <button
+                              onClick={() => handleDeleteProfile(profile.id)}
+                              className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                              title="Delete Profile"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                     
@@ -871,6 +894,31 @@ function App() {
           <p>Spotify Stats Explorer &copy; 2025. Not affiliated with Spotify.</p>
         </div>
       </footer>
+
+      {/* API Settings Modal */}
+      {showApiSettings && currentProfileId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-700">
+              <h2 className="text-xl font-bold text-white">
+                API Settings - {getCurrentProfile()?.name}
+              </h2>
+              <button
+                onClick={() => setShowApiSettings(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <ProfileApiSettings
+                profileId={currentProfileId}
+                onDataUpdated={handleApiDataUpdated}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

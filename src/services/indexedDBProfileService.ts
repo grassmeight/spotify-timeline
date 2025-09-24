@@ -36,7 +36,15 @@ export interface ProfileData {
   createdAt: string;
   lastAccessed: string;
   streamingData: any;
-  spotifyApiKey?: string;
+  spotifyApiCredentials?: {
+    clientId: string;
+    clientSecret: string;
+    enabled: boolean;
+    lastSync?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    tokenExpiry?: string;
+  };
 }
 
 // IndexedDB wrapper class
