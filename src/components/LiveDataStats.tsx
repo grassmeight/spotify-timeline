@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Music, Clock, User, Disc, BarChart2, Activity, TrendingUp, PlayCircle, Headphones, Calendar } from 'lucide-react';
+import { Music, Clock, User, Disc, BarChart2, Activity, TrendingUp, PlayCircle, Calendar } from 'lucide-react';
 import { getCurrentUser, getRecentlyPlayed, getTopTracks, getTopArtists, SpotifyUser, isAuthenticated } from '../services/spotifyAuthService';
 
 const LiveDataStats: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<SpotifyUser | null>(null);
-  const [recentTracks, setRecentTracks] = useState<any[]>([]);
-  const [topTracks, setTopTracks] = useState<any[]>([]);
-  const [topArtists, setTopArtists] = useState<any[]>([]);
+  const [recentTracks, setRecentTracks] = useState<Array<{ track: { name: string; artists: Array<{ name: string }> }; played_at: string }>>([]);
+  const [topTracks, setTopTracks] = useState<Array<{ name: string; artists: Array<{ name: string }> }>>([]);
+  const [topArtists, setTopArtists] = useState<Array<{ name: string; genres?: string[] }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(false);
 
@@ -181,7 +181,7 @@ const LiveDataStats: React.FC = () => {
                 <Music className="h-4 w-4 text-green-400" />
                 <div className="flex-1">
                   <p className="font-medium">{item.track.name}</p>
-                  <p className="text-sm text-gray-400">{item.track.artists.map((a: any) => a.name).join(', ')}</p>
+                  <p className="text-sm text-gray-400">{item.track.artists.map((a) => a.name).join(', ')}</p>
                 </div>
                 <div className="text-xs text-gray-400">
                   {new Date(item.played_at).toLocaleTimeString()}
@@ -225,7 +225,7 @@ const LiveDataStats: React.FC = () => {
                   <span className="text-green-400 font-bold">{index + 1}.</span>
                   <div>
                     <p className="font-medium">{track.name}</p>
-                    <p className="text-xs text-gray-400">{track.artists.map((a: any) => a.name).join(', ')}</p>
+                    <p className="text-xs text-gray-400">{track.artists.map((a) => a.name).join(', ')}</p>
                   </div>
                 </li>
               ))

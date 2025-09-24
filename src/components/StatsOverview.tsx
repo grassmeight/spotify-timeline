@@ -22,8 +22,8 @@ interface StatsOverviewProps {
 
 const StatsOverview: React.FC<StatsOverviewProps> = ({ data }) => {
   // Handle data structure compatibility - support both direct stats and nested stats
-  const total_stats = data?.total_stats || data?.stats?.total_stats;
-  const session_stats = data?.session_stats || data?.stats?.session_stats;
+  const total_stats = data?.total_stats;
+  const session_stats = data?.session_stats;
   
   // If no data available, show loading or empty state
   if (!total_stats || !session_stats) {

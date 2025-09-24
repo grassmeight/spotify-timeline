@@ -1,7 +1,27 @@
 /**
  * Analyze and process Spotify streaming data
  */
-export const analyzeStreamingData = async (rawData: any[]): Promise<any[]> => {
+export interface StreamingEntry {
+  ts: string;
+  ms_played: number;
+  master_metadata_track_name: string;
+  master_metadata_album_artist_name: string;
+  master_metadata_album_album_name?: string;
+  platform?: string;
+  shuffle?: boolean;
+  skipped?: boolean;
+  offline?: boolean;
+  offline_timestamp?: string | number | boolean | null;
+}
+
+export interface ProcessedStreamingEntry extends StreamingEntry {
+  date: string;
+  hour: number;
+  dayOfWeek: number;
+  duration_minutes: number;
+}
+
+export const analyzeStreamingData = async (rawData: StreamingEntry[]): Promise<ProcessedStreamingEntry[]> => {
   console.log(`Analyzing ${rawData.length} streaming entries...`);
   
   // Basic validation
@@ -47,7 +67,7 @@ export const analyzeStreamingData = async (rawData: any[]): Promise<any[]> => {
         // Normalize boolean fields
         skipped: Boolean(item.skipped),
         shuffle: Boolean(item.shuffle),
-        offline_timestamp: Boolean(item.offline_timestamp),
+        offline_timestamp: item.offline_timestamp,
         // Clean up track/artist names
         master_metadata_track_name: item.master_metadata_track_name?.trim() || '',
         master_metadata_album_artist_name: item.master_metadata_album_artist_name?.trim() || '',
@@ -66,7 +86,7 @@ export const analyzeStreamingData = async (rawData: any[]): Promise<any[]> => {
 /**
  * Remove duplicate entries from streaming data
  */
-export const removeDuplicates = (data: any[]): any[] => {
+export const removeDuplicates = (data: StreamingEntry[]): StreamingEntry[] => {
   const seen = new Set<string>();
   
   return data.filter(item => {
@@ -85,7 +105,7 @@ export const removeDuplicates = (data: any[]): any[] => {
 /**
  * Merge multiple data arrays and remove duplicates
  */
-export const mergeStreamingData = (existingData: any[], newData: any[]): any[] => {
+export const mergeStreamingData = (existingData: StreamingEntry[], newData: StreamingEntry[]): StreamingEntry[] => {
   const combined = [...existingData, ...newData];
   const deduplicated = removeDuplicates(combined);
   

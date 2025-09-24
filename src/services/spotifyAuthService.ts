@@ -107,12 +107,23 @@ export const getAccessToken = async (code: string): Promise<{
     return response.data;
   } catch (error) {
     console.error('Error getting access token:', error);
-    if (error.response) {
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
+    
+    interface AxiosError {
+      response?: {
+        data?: {
+          error?: string;
+        };
+        status?: number;
+      };
+    }
+    
+    const axiosError = error as AxiosError;
+    if (axiosError.response) {
+      console.error('Response data:', axiosError.response.data);
+      console.error('Response status:', axiosError.response.status);
       
       // Handle specific Spotify errors
-      if (error.response.data?.error === 'invalid_grant') {
+      if (axiosError.response.data?.error === 'invalid_grant') {
         throw new Error('Authorization code has expired or been used. Please try connecting again.');
       }
     }

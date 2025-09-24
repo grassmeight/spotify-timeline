@@ -20,11 +20,7 @@ const ProfileApiSettings: React.FC<ProfileApiSettingsProps> = ({ profileId, onDa
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [authStep, setAuthStep] = useState(1); // 1: Credentials, 2: Authorization, 3: Ready
 
-  useEffect(() => {
-    loadCredentials();
-  }, [profileId]);
-
-  const loadCredentials = async () => {
+  const loadCredentials = React.useCallback(async () => {
     try {
       const profile = await getProfile(profileId);
       if (profile?.spotifyApiCredentials) {
@@ -44,7 +40,11 @@ const ProfileApiSettings: React.FC<ProfileApiSettingsProps> = ({ profileId, onDa
     } catch (error) {
       console.error('Error loading credentials:', error);
     }
-  };
+  }, [profileId]);
+
+  useEffect(() => {
+    loadCredentials();
+  }, [loadCredentials]);
 
   const handleTestCredentials = async () => {
     if (!credentials.clientId.trim() || !credentials.clientSecret.trim()) {
@@ -107,18 +107,7 @@ const ProfileApiSettings: React.FC<ProfileApiSettingsProps> = ({ profileId, onDa
     window.open(authUrl, 'spotify_auth', 'width=400,height=500');
   };
 
-  // Check for returning auth code (simplified - in real app you'd handle this properly)
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    const state = urlParams.get('state');
-    
-    if (code && state === 'user_api_auth') {
-      handleAuthReturn(code);
-    }
-  }, []);
-
-  const handleAuthReturn = async (code: string) => {
+  const handleAuthReturn = React.useCallback(async (code: string) => {
     try {
       const savedProfileId = localStorage.getItem('pending_auth_profile');
       const savedCredentials = localStorage.getItem('pending_auth_credentials');
@@ -154,7 +143,18 @@ const ProfileApiSettings: React.FC<ProfileApiSettingsProps> = ({ profileId, onDa
       console.error('Auth error:', error);
       setError('Authorization failed. Please try again.');
     }
-  };
+  }, [profileId]);
+
+  // Check for returning auth code (simplified - in real app you'd handle this properly)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    
+    if (code && state === 'user_api_auth') {
+      handleAuthReturn(code);
+    }
+  }, [handleAuthReturn]);
 
   const handleSyncRecentData = async () => {
     if (!isAuthorized) {
@@ -195,10 +195,10 @@ const ProfileApiSettings: React.FC<ProfileApiSettingsProps> = ({ profileId, onDa
         // Merge with existing data, avoiding duplicates
         const existingData = Array.isArray(existingProfile.streamingData) 
           ? existingProfile.streamingData 
-          : existingProfile.streamingData.rawData || [];
+          : (existingProfile.streamingData as { rawData?: unknown[] })?.rawData || [];
 
         // Create a set of existing timestamps to avoid duplicates
-        const existingTimestamps = new Set(existingData.map((item: any) => item.ts));
+        const existingTimestamps = new Set(existingData.map((item: { ts: string }) => item.ts));
         
         // Filter out tracks that already exist
         const uniqueNewData = newStreamingData.filter(item => !existingTimestamps.has(item.ts));
@@ -211,8 +211,13 @@ const ProfileApiSettings: React.FC<ProfileApiSettingsProps> = ({ profileId, onDa
       await updateProfile(profileId, {
         streamingData: combinedData,
         spotifyApiCredentials: {
-          ...existingProfile?.spotifyApiCredentials,
-          lastSync: new Date().toISOString()
+          clientId: existingProfile?.spotifyApiCredentials?.clientId || '',
+          clientSecret: existingProfile?.spotifyApiCredentials?.clientSecret || '',
+          enabled: existingProfile?.spotifyApiCredentials?.enabled || false,
+          lastSync: new Date().toISOString(),
+          accessToken: existingProfile?.spotifyApiCredentials?.accessToken,
+          refreshToken: existingProfile?.spotifyApiCredentials?.refreshToken,
+          tokenExpiry: existingProfile?.spotifyApiCredentials?.tokenExpiry
         }
       });
 

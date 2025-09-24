@@ -21,7 +21,7 @@ interface BehaviorStatsProps {
     offline_rate: number;
     shuffle_rate: number;
   };
-  sessionStats: {
+  sessionStats?: {
     average_session_minutes: number;
     average_tracks_per_session: number;
     total_sessions: number;
@@ -31,7 +31,6 @@ interface BehaviorStatsProps {
 
 const BehaviorStats: React.FC<BehaviorStatsProps> = ({ 
   behaviorStats, 
-  sessionStats,
   platformStats 
 }) => {
   // Provide default values if data is missing
@@ -42,12 +41,6 @@ const BehaviorStats: React.FC<BehaviorStatsProps> = ({
     shuffle_rate: behaviorStats?.shuffle_rate ?? 0
   };
   
-  const safeSessionStats = {
-    ...sessionStats,
-    average_session_minutes: sessionStats?.average_session_minutes ?? 0,
-    average_tracks_per_session: sessionStats?.average_tracks_per_session ?? 0,
-    total_sessions: sessionStats?.total_sessions ?? 0
-  };
   
   const safePlatformStats = platformStats || {};
   // Process platform data
@@ -104,8 +97,9 @@ const BehaviorStats: React.FC<BehaviorStatsProps> = ({
         titleColor: '#fff',
         bodyColor: '#fff',
         callbacks: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           label: function(context: any) {
-            const value = context.raw;
+            const value = context.raw as number;
             const percentage = ((value / totalPlatformPlays) * 100).toFixed(1);
             return `${context.label}: ${value} plays (${percentage}%)`;
           }

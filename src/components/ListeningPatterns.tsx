@@ -33,12 +33,12 @@ interface ListeningPatternsProps {
 const ListeningPatterns: React.FC<ListeningPatternsProps> = ({ patterns }) => {
   // Provide safe defaults
   const safePatterns = {
-    peak_hour: 12,
-    peak_day: 'Monday',
-    hourly_distribution: {},
-    daily_distribution: {},
-    monthly_distribution: {},
-    ...patterns
+    ...patterns,
+    peak_hour: patterns.peak_hour || 12,
+    peak_day: patterns.peak_day || 'Monday',
+    hourly_distribution: patterns.hourly_distribution || {},
+    daily_distribution: patterns.daily_distribution || {},
+    monthly_distribution: patterns.monthly_distribution || {}
   };
 
   // Process hourly distribution data

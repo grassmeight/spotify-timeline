@@ -4,7 +4,6 @@ import {
   getProfileSummaries, 
   createProfile, 
   deleteProfile, 
-  getActiveProfileId, 
   setActiveProfile, 
   clearActiveProfile,
   exportProfile,
@@ -12,8 +11,8 @@ import {
   getStorageStats,
   updateProfile,
   ProfileSummary 
-} from '../services/profileService';
-import { analyzeStreamingData } from '../services/streamingDataAnalyzer';
+, StorageStats } from '../services/indexedDBProfileService';
+import { analyzeStreamingData, StreamingEntry } from '../services/streamingDataAnalyzer';
 
 interface ProfileSelectorProps {
   onProfileSelected: (profileId: string | null) => void;
@@ -28,24 +27,19 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onProfileSelected, cu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadProfiles();
-  }, []);
-
-  const loadProfiles = () => {
+  const loadProfiles = React.useCallback(async () => {
     try {
-      const profileSummaries = getProfileSummaries();
-      setProfiles(profileSummaries);
-      
-      // If no profiles exist and no current profile, show create form
-      if (profileSummaries.length === 0 && !currentProfileId) {
-        setShowCreateForm(true);
-      }
+      const allProfiles = await getProfileSummaries();
+      setProfiles(allProfiles);
     } catch (error) {
       console.error('Error loading profiles:', error);
-      setError('Failed to load profiles');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadProfiles();
+  }, [loadProfiles]);
+
 
   const handleCreateProfile = async () => {
     if (!newProfileName.trim()) {
@@ -62,13 +56,13 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onProfileSelected, cu
       setLoading(true);
       setError(null);
       
-      const newProfile = createProfile(newProfileName);
+      const newProfile = await createProfile(newProfileName);
       setActiveProfile(newProfile.id);
       onProfileSelected(newProfile.id);
       
       setNewProfileName('');
       setShowCreateForm(false);
-      loadProfiles();
+      await loadProfiles();
     } catch (error) {
       console.error('Error creating profile:', error);
       setError('Failed to create profile');
@@ -93,21 +87,21 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onProfileSelected, cu
       setError(null);
       
       // Create the profile
-      const newProfile = createProfile(newProfileName);
+      const newProfile = await createProfile(newProfileName);
       setActiveProfile(newProfile.id);
       
       // Load and process sample data
       const sampleData = await import('../data/sampleStreamingData.json');
-      const analyzedData = await analyzeStreamingData(sampleData.default);
+      const analyzedData = await analyzeStreamingData(sampleData.default as StreamingEntry[]);
       
       // Save sample data to the profile
-      updateProfile(newProfile.id, { streamingData: analyzedData });
+      await updateProfile(newProfile.id, { streamingData: analyzedData });
       
       onProfileSelected(newProfile.id);
       
       setNewProfileName('');
       setShowCreateForm(false);
-      loadProfiles();
+      await loadProfiles();
     } catch (error) {
       console.error('Error creating profile with sample data:', error);
       setError('Failed to create profile with sample data');
@@ -136,7 +130,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onProfileSelected, cu
         onProfileSelected(null);
       }
       
-      loadProfiles();
+      await loadProfiles();
     } catch (error) {
       console.error('Error deleting profile:', error);
       setError('Failed to delete profile');
@@ -145,9 +139,12 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onProfileSelected, cu
     }
   };
 
-  const handleExportProfile = (profileId: string, profileName: string) => {
+  const handleExportProfile = async (profileId: string, profileName: string) => {
     try {
-      const profileData = exportProfile(profileId);
+      const profileData = await exportProfile(profileId);
+      if (!profileData) {
+        throw new Error('Failed to export profile data');
+      }
       const blob = new Blob([profileData], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -174,9 +171,13 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onProfileSelected, cu
         setError(null);
         
         const profileData = e.target?.result as string;
-        const importedProfile = importProfile(profileData);
+        const importedProfile = await importProfile(profileData);
         
-        loadProfiles();
+        if (!importedProfile) {
+          throw new Error('Failed to import profile');
+        }
+        
+        await loadProfiles();
         setActiveProfile(importedProfile.id);
         onProfileSelected(importedProfile.id);
       } catch (error) {
@@ -192,7 +193,19 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onProfileSelected, cu
     event.target.value = '';
   };
 
-  const storageStats = getStorageStats();
+  const [storageStatsData, setStorageStatsData] = useState<StorageStats | null>(null);
+
+  useEffect(() => {
+    const loadStorageStats = async () => {
+      try {
+        const stats = await getStorageStats();
+        setStorageStatsData(stats);
+      } catch (error) {
+        console.error('Error loading storage stats:', error);
+      }
+    };
+    loadStorageStats();
+  }, []);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString();
@@ -245,10 +258,10 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onProfileSelected, cu
             Storage Statistics
           </h3>
           <div className="grid grid-cols-2 gap-4 text-sm text-gray-300">
-            <div>Profiles: {storageStats.profileCount}</div>
-            <div>Used Space: {storageStats.totalSizeMB} MB</div>
-            <div>Available: {storageStats.availableSpaceMB} MB</div>
-            <div>Total Limit: ~5 MB</div>
+            <div>Profiles: {profiles.length}</div>
+            <div>Used Space: {storageStatsData?.totalSizeMB?.toFixed(2) || 0} MB</div>
+            <div>Usage: {storageStatsData?.usagePercent?.toFixed(1) || 0}%</div>
+            <div>Available: {storageStatsData?.limitGB || 'Several GB'}</div>
           </div>
         </div>
       )}
@@ -325,11 +338,11 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onProfileSelected, cu
                   <div className="flex items-center space-x-4 text-sm text-gray-400 mt-2">
                     <div className="flex items-center">
                       <Calendar className="h-4 w-4 mr-1" />
-                      Created: {formatDate(profile.createdAt)}
+                      Created: {formatDate(new Date(profile.createdAt).getTime())}
                     </div>
                     <div className="flex items-center">
                       <Music className="h-4 w-4 mr-1" />
-                      {profile.hasData ? `${profile.trackCount.toLocaleString()} tracks` : 'No data'}
+                      {profile.totalTracks ? `${profile.totalTracks.toLocaleString()} tracks` : 'No data'}
                     </div>
                   </div>
                 </div>

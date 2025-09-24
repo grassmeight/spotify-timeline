@@ -51,7 +51,8 @@ const ListeningTrends: React.FC<ListeningTrendsProps> = ({ trends }) => {
   
   // Provide safe defaults
   const safeTrends = {
-    daily_stats: {
+    ...trends,
+    daily_stats: trends.daily_stats || {
       dates: [],
       hours_played: [],
       tracks_played: [],
@@ -59,15 +60,14 @@ const ListeningTrends: React.FC<ListeningTrendsProps> = ({ trends }) => {
       offline_rate: [],
       shuffle_rate: []
     },
-    rolling_averages: {
+    rolling_averages: trends.rolling_averages || {
       dates: [],
       hours_played: [],
       tracks_played: [],
       skip_rate: [],
       offline_rate: [],
       shuffle_rate: []
-    },
-    ...trends
+    }
   };
   
   const data = showRollingAverage ? safeTrends.rolling_averages : safeTrends.daily_stats;

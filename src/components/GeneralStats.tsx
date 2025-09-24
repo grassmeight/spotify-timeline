@@ -1,8 +1,14 @@
 import React from 'react';
-import { Music, Clock, User, Disc, BarChart2, Activity, TrendingUp, Calendar } from 'lucide-react';
+import { Music, Clock, User, Disc, Activity, Calendar } from 'lucide-react';
 
 interface GeneralStatsProps {
-  data: any[];
+  data: Array<{
+    ts: string;
+    ms_played: number;
+    master_metadata_track_name: string;
+    master_metadata_album_artist_name: string;
+    master_metadata_album_album_name?: string;
+  }>;
 }
 
 const GeneralStats: React.FC<GeneralStatsProps> = ({ data }) => {
@@ -14,7 +20,6 @@ const GeneralStats: React.FC<GeneralStatsProps> = ({ data }) => {
   
   const totalMinutes = data.reduce((sum, track) => sum + (track.ms_played || 0), 0) / (1000 * 60);
   const totalHours = totalMinutes / 60;
-  const totalDays = totalHours / 24;
   
   const averageTrackLength = data.length > 0 ? totalMinutes / data.length : 0;
   

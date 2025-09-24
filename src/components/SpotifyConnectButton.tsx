@@ -12,46 +12,35 @@ const SpotifyConnectButton: React.FC<SpotifyConnectButtonProps> = ({ onConnectio
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    checkConnection();
-  }, []);
-
-  const checkConnection = async () => {
+  const checkConnection = React.useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-      
-      const authenticated = isAuthenticated();
-      setConnected(authenticated);
-      
-      if (authenticated) {
+      if (isAuthenticated()) {
+        setConnected(true);
         try {
-          // Get actual user profile from Spotify
           const userProfile = await getCurrentUser();
           setUser(userProfile);
-          if (onConnectionChange) onConnectionChange(true);
         } catch (userError) {
           console.error('Error fetching user profile:', userError);
-          // Still mark as connected but without user data
+          // Still consider connected even if user fetch fails
           setUser(null);
-          if (onConnectionChange) onConnectionChange(true);
         }
       } else {
-        if (onConnectionChange) onConnectionChange(false);
+        setConnected(false);
+        setUser(null);
       }
     } catch (error) {
-      console.error('Error checking Spotify connection:', error);
+      console.error('Error checking connection:', error);
       setConnected(false);
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError('Unknown error checking Spotify connection');
-      }
-      if (onConnectionChange) onConnectionChange(false);
+      setUser(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    checkConnection();
+  }, [checkConnection]);
+
 
   const handleConnect = () => {
     try {

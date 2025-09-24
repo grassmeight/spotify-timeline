@@ -66,7 +66,16 @@ const SpotifyCallback: React.FC = () => {
         console.error('Error during token exchange:', err);
         
         // Handle specific Spotify errors
-        if (err?.response?.data?.error === 'invalid_grant') {
+        interface AxiosError {
+          response?: {
+            data?: {
+              error?: string;
+            };
+          };
+        }
+        
+        const error = err as AxiosError;
+        if (error?.response?.data?.error === 'invalid_grant') {
           setError('Authorization code expired or already used. Please try connecting again.');
         } else if (err instanceof Error) {
           setError(`Failed to complete authentication: ${err.message}`);

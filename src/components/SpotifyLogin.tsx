@@ -11,26 +11,7 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Check if we're returning from Spotify auth
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    const error = urlParams.get('error');
-    
-    if (code) {
-      // Remove code from URL to prevent issues on refresh
-      window.history.replaceState({}, document.title, window.location.pathname);
-      handleAuthCode(code);
-    } else if (error) {
-      setError('Authentication failed: ' + error);
-      setLoading(false);
-    } else {
-      // Check if already authenticated
-      checkAuthentication();
-    }
-  }, []);
-
-  const checkAuthentication = async () => {
+  const checkAuthentication = React.useCallback(async () => {
     try {
       setLoading(true);
       
@@ -54,9 +35,9 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [onLoginSuccess]);
 
-  const handleAuthCode = async (code: string) => {
+  const handleAuthCode = React.useCallback(async (code: string) => {
     try {
       setLoading(true);
       
@@ -81,7 +62,26 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [onLoginSuccess]);
+
+  useEffect(() => {
+    // Check if we're returning from Spotify auth
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const error = urlParams.get('error');
+    
+    if (code) {
+      // Remove code from URL to prevent issues on refresh
+      window.history.replaceState({}, document.title, window.location.pathname);
+      handleAuthCode(code);
+    } else if (error) {
+      setError('Authentication failed: ' + error);
+      setLoading(false);
+    } else {
+      // Check if already authenticated
+      checkAuthentication();
+    }
+  }, [checkAuthentication, handleAuthCode]);
 
   const handleLogin = () => {
     // Redirect to Spotify authorization page

@@ -2,7 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { User, Music, Disc, Search, X } from 'lucide-react';
 
 interface FullContentProps {
-  rawData: any[];
+  rawData: Array<{
+    ts: string;
+    ms_played: number;
+    master_metadata_track_name: string;
+    master_metadata_album_artist_name: string;
+    master_metadata_album_album_name?: string;
+    platform?: string;
+    shuffle?: boolean;
+    skipped?: boolean;
+    offline?: boolean;
+  }>;
 }
 
 const FullContent: React.FC<FullContentProps> = ({ rawData }) => {
@@ -21,13 +31,7 @@ const FullContent: React.FC<FullContentProps> = ({ rawData }) => {
 
   const itemsPerPage = 50;
 
-  useEffect(() => {
-    if (rawData && rawData.length > 0) {
-      processData();
-    }
-  }, [rawData]);
-
-  const processData = () => {
+  const processRawData = React.useCallback(() => {
     // Count artists
     const artistCounts: Record<string, number> = {};
     const trackCounts: Record<string, { count: number; artist: string }> = {};
@@ -42,34 +46,44 @@ const FullContent: React.FC<FullContentProps> = ({ rawData }) => {
 
       // Process tracks
       const track = item.master_metadata_track_name;
-      if (track) {
-        if (!trackCounts[track]) {
-          trackCounts[track] = { count: 0, artist: artist || 'Unknown Artist' };
-        }
-        trackCounts[track].count += 1;
+      if (track && artist) {
+        const key = `${track} - ${artist}`;
+        trackCounts[key] = {
+          count: (trackCounts[key]?.count || 0) + 1,
+          artist
+        };
       }
 
       // Process albums
       const album = item.master_metadata_album_album_name;
-      if (album) {
-        if (!albumCounts[album]) {
-          albumCounts[album] = { count: 0, artist: artist || 'Unknown Artist' };
-        }
-        albumCounts[album].count += 1;
+      if (album && artist) {
+        const key = `${album} - ${artist}`;
+        albumCounts[key] = {
+          count: (albumCounts[key]?.count || 0) + 1,
+          artist
+        };
       }
     });
 
-    // Convert to arrays and sort
+    // Convert to sorted arrays
     const sortedArtists = Object.entries(artistCounts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
 
     const sortedTracks = Object.entries(trackCounts)
-      .map(([name, data]) => ({ name, artist: data.artist, count: data.count }))
+      .map(([key, data]) => ({
+        name: key.split(' - ')[0],
+        artist: data.artist,
+        count: data.count
+      }))
       .sort((a, b) => b.count - a.count);
 
     const sortedAlbums = Object.entries(albumCounts)
-      .map(([name, data]) => ({ name, artist: data.artist, count: data.count }))
+      .map(([key, data]) => ({
+        name: key.split(' - ')[0],
+        artist: data.artist,
+        count: data.count
+      }))
       .sort((a, b) => b.count - a.count);
 
     setSortedData({
@@ -77,7 +91,13 @@ const FullContent: React.FC<FullContentProps> = ({ rawData }) => {
       tracks: sortedTracks,
       albums: sortedAlbums
     });
-  };
+  }, [rawData]);
+
+  useEffect(() => {
+    if (rawData && rawData.length > 0) {
+      processRawData();
+    }
+  }, [rawData, processRawData]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -261,7 +281,7 @@ const FullContent: React.FC<FullContentProps> = ({ rawData }) => {
                       {track.name || 'Unknown Track'}
                     </div>
                     <div className="col-span-3 text-gray-300 truncate">
-                      {track.artist || 'Unknown Artist'}
+                      {(track as { name: string; artist: string; count: number }).artist || 'Unknown Artist'}
                     </div>
                     <div className="col-span-3 text-right">
                       {track.count.toLocaleString()} plays
@@ -299,7 +319,7 @@ const FullContent: React.FC<FullContentProps> = ({ rawData }) => {
                       {album.name || 'Unknown Album'}
                     </div>
                     <div className="col-span-3 text-gray-300 truncate">
-                      {album.artist || 'Unknown Artist'}
+                      {(album as { name: string; artist: string; count: number }).artist || 'Unknown Artist'}
                     </div>
                     <div className="col-span-3 text-right">
                       {album.count.toLocaleString()} plays

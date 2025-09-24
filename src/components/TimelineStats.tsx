@@ -1,14 +1,21 @@
 import React, { useMemo } from 'react';
 import { Calendar, Clock, TrendingUp, Activity } from 'lucide-react';
 
+interface StreamingEntry {
+  ts: string;
+  ms_played: number;
+  master_metadata_track_name: string;
+  master_metadata_album_artist_name: string;
+}
+
 interface TimelineStatsProps {
-  data: any[];
+  data: StreamingEntry[];
 }
 
 const TimelineStats: React.FC<TimelineStatsProps> = ({ data }) => {
   const timelineData = useMemo(() => {
     // Group data by date
-    const dateGroups: Record<string, any[]> = {};
+    const dateGroups: Record<string, StreamingEntry[]> = {};
     
     data.forEach(track => {
       const date = new Date(track.ts).toISOString().split('T')[0];
@@ -33,7 +40,14 @@ const TimelineStats: React.FC<TimelineStatsProps> = ({ data }) => {
   }, [data]);
 
   const monthlyData = useMemo(() => {
-    const monthGroups: Record<string, any> = {};
+    const monthGroups: Record<string, {
+      month: string;
+      totalTracks: number;
+      totalMinutes: number;
+      uniqueArtists: Set<unknown>;
+      uniqueTracks: Set<unknown>;
+      days: number;
+    }> = {};
     
     timelineData.forEach(day => {
       const month = day.date.substring(0, 7); // YYYY-MM
@@ -56,7 +70,7 @@ const TimelineStats: React.FC<TimelineStatsProps> = ({ data }) => {
       // This is a simplified version
     });
 
-    return Object.values(monthGroups).sort((a: any, b: any) => a.month.localeCompare(b.month));
+    return Object.values(monthGroups).sort((a, b) => a.month.localeCompare(b.month));
   }, [timelineData]);
 
   const stats = useMemo(() => {
@@ -145,7 +159,7 @@ const TimelineStats: React.FC<TimelineStatsProps> = ({ data }) => {
           Recent Activity (Last 10 Days)
         </h3>
         <div className="space-y-2">
-          {timelineData.slice(-10).reverse().map((day, index) => (
+          {timelineData.slice(-10).reverse().map((day) => (
             <div key={day.date} className="flex items-center justify-between p-3 bg-gray-600 rounded-lg">
               <div className="flex items-center space-x-4">
                 <span className="text-gray-300 font-medium">
@@ -172,7 +186,7 @@ const TimelineStats: React.FC<TimelineStatsProps> = ({ data }) => {
           Monthly Summary
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {monthlyData.slice(-6).map((month: any) => (
+          {monthlyData.slice(-6).map((month) => (
             <div key={month.month} className="p-4 bg-gray-600 rounded-lg">
               <h4 className="font-semibold text-green-400 mb-2">
                 {new Date(month.month + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}

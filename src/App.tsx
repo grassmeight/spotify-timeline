@@ -13,9 +13,29 @@ import {
   createProfile,
   getProfileSummaries,
   deleteProfile,
-  getStorageStats
+  getStorageStats,
+  ProfileSummary,
+  StorageStats
 } from './services/indexedDBProfileService';
 import ProfileApiSettings from './components/ProfileApiSettings';
+
+// Define interfaces for Spotify data
+interface SpotifyStreamingEntry {
+  ts: string;
+  ms_played: number;
+  master_metadata_track_name: string;
+  master_metadata_album_artist_name: string;
+  master_metadata_album_album_name?: string;
+  spotify_track_uri?: string;
+  platform?: string;
+  shuffle?: boolean;
+  skipped?: boolean;
+  offline?: boolean;
+  offline_timestamp?: string | null;
+  incognito_mode?: boolean;
+  reason_start?: string;
+  reason_end?: string;
+}
 
 // Define the interface for our Spotify stats
 interface SpotifyStats {
@@ -71,14 +91,14 @@ interface SpotifyStats {
       shuffle_rate: number[];
     };
   };
-  rawData: any[]; // Add raw data to the interface
+  rawData: SpotifyStreamingEntry[]; // Add raw data to the interface
 }
 
 function App() {
   const [data, setData] = useState<SpotifyStats | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [rawData, setRawData] = useState<any[]>([]);
+  const [rawData, setRawData] = useState<SpotifyStreamingEntry[]>([]);
   const [isAppending, setIsAppending] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -87,45 +107,10 @@ function App() {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showCreateProfile, setShowCreateProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [storageStats, setStorageStats] = useState<any>(null);
+  const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
   const [showApiSettings, setShowApiSettings] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Profile management with multi-profile support
-  useEffect(() => {
-    const initializeProfiles = async () => {
-      await loadProfiles();
-      
-      // Create or load default profile in the background
-      let profileId = getActiveProfileId();
-      if (!profileId) {
-        const defaultProfile = await createProfile('Personal Account');
-        setActiveProfile(defaultProfile.id);
-        profileId = defaultProfile.id;
-        setCurrentProfileId(profileId);
-      } else {
-        setCurrentProfileId(profileId);
-      }
-      
-      await loadProfileData(profileId);
-    };
-    
-    initializeProfiles();
-  }, []);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowProfileDropdown(false);
-        setShowCreateProfile(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const loadProfiles = async () => {
     const allProfiles = await getProfileSummaries();
@@ -135,34 +120,7 @@ function App() {
     setStorageStats(stats);
   };
 
-  const loadProfileData = async (profileId: string) => {
-    // Set the active profile first
-    setActiveProfile(profileId);
-    const activeProfile = await getActiveProfile();
-    if (activeProfile?.streamingData) {
-      // Check if data is already processed (has stats property) or raw JSON
-      if (Array.isArray(activeProfile.streamingData)) {
-        // Raw JSON data - process it
-        const processedData = processSpotifyData(activeProfile.streamingData);
-        setData(processedData);
-        setRawData(activeProfile.streamingData);
-      } else if (activeProfile.streamingData.stats) {
-        // Already processed data - use directly
-        setData(activeProfile.streamingData);
-        setRawData(activeProfile.streamingData.rawData || []);
-      }
-    } else {
-      // Load sample data for first-time users to showcase features
-      const sampleDataWithRaw = {
-        ...SampleData,
-        rawData: [] // Add empty raw data for sample data
-      };
-      setData(sampleDataWithRaw);
-      updateProfile(profileId, { streamingData: sampleDataWithRaw });
-    }
-  };
-
-  const processSpotifyData = (jsonData: any) => {
+  const processSpotifyData = React.useCallback((jsonData: SpotifyStreamingEntry[]) => {
     try {
       // Basic validation to check if this is Spotify data
       if (!Array.isArray(jsonData)) {
@@ -194,9 +152,72 @@ function App() {
         throw new Error("Failed to process Spotify data: Unknown error");
       }
     }
-  };
+  }, []);
 
-  const analyzeSpotifyData = (jsonData: any[]) => {
+  const loadProfileData = React.useCallback(async (profileId: string) => {
+    // Set the active profile first
+    setActiveProfile(profileId);
+    const activeProfile = await getActiveProfile();
+    if (activeProfile?.streamingData) {
+      // Check if data is already processed (has stats property) or raw JSON
+      if (Array.isArray(activeProfile.streamingData)) {
+        // Raw JSON data - process it
+        const processedData = processSpotifyData(activeProfile.streamingData);
+        setData(processedData);
+        setRawData(activeProfile.streamingData);
+      } else if (activeProfile.streamingData && typeof activeProfile.streamingData === 'object' && 'stats' in activeProfile.streamingData) {
+        // Already processed data - use directly
+        setData(activeProfile.streamingData as SpotifyStats);
+        setRawData((activeProfile.streamingData as SpotifyStats).rawData || []);
+      }
+    } else {
+      // Load sample data for first-time users to showcase features
+      const sampleDataWithRaw = {
+        ...SampleData,
+        rawData: [] as SpotifyStreamingEntry[] // Add empty raw data for sample data
+      };
+      setData(sampleDataWithRaw as SpotifyStats);
+      updateProfile(profileId, { streamingData: sampleDataWithRaw });
+    }
+  }, [processSpotifyData]);
+
+  // Profile management with multi-profile support
+  useEffect(() => {
+    const initializeProfiles = async () => {
+      await loadProfiles();
+      
+      // Create or load default profile in the background
+      let profileId = getActiveProfileId();
+      if (!profileId) {
+        const defaultProfile = await createProfile('Personal Account');
+        setActiveProfile(defaultProfile.id);
+        profileId = defaultProfile.id;
+        setCurrentProfileId(profileId);
+      } else {
+        setCurrentProfileId(profileId);
+      }
+      
+      await loadProfileData(profileId);
+    };
+    
+    initializeProfiles();
+  }, [loadProfileData]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowProfileDropdown(false);
+        setShowCreateProfile(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+
+  const analyzeSpotifyData = (jsonData: SpotifyStreamingEntry[]) => {
     // This is a simplified version of the Python analysis
     // In a real app, this would be much more comprehensive
     
@@ -476,7 +497,7 @@ function App() {
   };
 
   // Function to remove duplicates from an array of Spotify streaming history entries
-  const removeDuplicates = (data: any[]): any[] => {
+  const removeDuplicates = (data: SpotifyStreamingEntry[]): SpotifyStreamingEntry[] => {
     // Create a Set to track unique entries based on timestamp + track + ms_played
     const seen = new Set();
     return data.filter(item => {
@@ -533,7 +554,7 @@ function App() {
           const jsonData = JSON.parse(content);
           
           // Process the data
-          let combinedData: any[] = [];
+          let combinedData: SpotifyStreamingEntry[] = [];
           
           if (append && rawData.length > 0) {
             // Combine with existing data

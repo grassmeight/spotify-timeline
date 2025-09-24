@@ -35,7 +35,7 @@ export interface ProfileData {
   name: string;
   createdAt: string;
   lastAccessed: string;
-  streamingData: any;
+  streamingData: unknown;
   spotifyApiCredentials?: {
     clientId: string;
     clientSecret: string;
@@ -141,7 +141,7 @@ class IndexedDBManager {
     });
   }
 
-  async saveProfileData(id: string, streamingData: any): Promise<void> {
+  async saveProfileData(id: string, streamingData: unknown): Promise<void> {
     if (!this.db) await this.init();
 
     return new Promise((resolve, reject) => {
@@ -172,7 +172,7 @@ class IndexedDBManager {
     });
   }
 
-  async getStorageUsage(): Promise<any> {
+  async getStorageUsage(): Promise<{ totalSizeMB: number; limitGB: string; usagePercent: number }> {
     if (!this.db) await this.init();
 
     return new Promise((resolve, reject) => {
@@ -192,11 +192,7 @@ class IndexedDBManager {
         });
 
         resolve({
-          totalSizeKB: Math.ceil(totalSize / 1024),
-          totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2),
-          profileSizes,
-          profileCount: data.length,
-          // IndexedDB can typically store several GB per origin
+          totalSizeMB: parseFloat((totalSize / (1024 * 1024)).toFixed(2)),
           limitGB: 'Several GB available',
           usagePercent: 0 // We can't easily calculate percentage for IndexedDB
         });
@@ -214,7 +210,7 @@ const dbManager = new IndexedDBManager();
 const ACTIVE_PROFILE_KEY = 'spotify_timeline_active_profile_id';
 
 // Helper functions to calculate profile stats
-const calculateProfileStats = (streamingData: any): { totalTracks: number; totalListeningHours: number; storageSizeKB: number } => {
+const calculateProfileStats = (streamingData: unknown): { totalTracks: number; totalListeningHours: number; storageSizeKB: number } => {
   let totalTracks = 0;
   let totalListeningHours = 0;
   
@@ -222,15 +218,21 @@ const calculateProfileStats = (streamingData: any): { totalTracks: number; total
     if (Array.isArray(streamingData)) {
       // Raw JSON data
       totalTracks = streamingData.length;
-      totalListeningHours = streamingData.reduce((sum: number, item: any) => sum + (item.ms_played || 0), 0) / (1000 * 60 * 60);
-    } else if (streamingData.rawData) {
-      // Processed data with rawData
-      totalTracks = streamingData.rawData.length;
-      totalListeningHours = streamingData.stats?.total_stats?.total_listening_hours || 0;
-    } else if (streamingData.stats) {
-      // Processed data without rawData
-      totalTracks = streamingData.stats.total_stats?.total_tracks_played || 0;
-      totalListeningHours = streamingData.stats.total_stats?.total_listening_hours || 0;
+      totalListeningHours = streamingData.reduce((sum: number, item: unknown) => {
+        const entry = item as { ms_played?: number };
+        return sum + (entry.ms_played || 0);
+      }, 0) / (1000 * 60 * 60);
+    } else if (typeof streamingData === 'object' && streamingData !== null) {
+      const data = streamingData as { rawData?: unknown[]; stats?: { total_stats?: { total_tracks_played?: number; total_listening_hours?: number } } };
+      if (data.rawData) {
+        // Processed data with rawData
+        totalTracks = data.rawData.length;
+        totalListeningHours = data.stats?.total_stats?.total_listening_hours || 0;
+      } else if (data.stats) {
+        // Processed data without rawData
+        totalTracks = data.stats.total_stats?.total_tracks_played || 0;
+        totalListeningHours = data.stats.total_stats?.total_listening_hours || 0;
+      }
     }
   }
 
@@ -424,16 +426,19 @@ export const importProfile = async (jsonString: string): Promise<ProfileData | n
   }
 };
 
-export const getStorageStats = async () => {
+export interface StorageStats {
+  totalSizeMB: number;
+  limitGB: string;
+  usagePercent: number;
+}
+
+export const getStorageStats = async (): Promise<StorageStats> => {
   try {
     return await dbManager.getStorageUsage();
   } catch (error) {
     console.error('Error getting storage stats:', error);
     return {
-      totalSizeKB: 0,
-      totalSizeMB: '0.00',
-      profileSizes: {},
-      profileCount: 0,
+      totalSizeMB: 0,
       limitGB: 'Several GB available',
       usagePercent: 0
     };

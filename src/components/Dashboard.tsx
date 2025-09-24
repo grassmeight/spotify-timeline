@@ -9,8 +9,64 @@ import FullContent from './FullContent';
 import LiveDataStats from './LiveDataStats';
 import { isAuthenticated } from '../services/spotifyAuthService';
 
+interface SpotifyStats {
+  stats: {
+    total_stats: {
+      total_listening_hours: number;
+      total_listening_minutes: number;
+      total_tracks_played: number;
+      unique_artists: number;
+      unique_albums: number;
+      unique_tracks: number;
+      average_track_length_seconds: number;
+    };
+    listening_patterns: {
+      peak_hour: number;
+      peak_day: string;
+      hourly_distribution: Record<string, number>;
+      daily_distribution: Record<string, number>;
+      monthly_distribution: Record<string, number>;
+    };
+    behavior_stats: {
+      skip_rate: number;
+      offline_rate: number;
+      shuffle_rate: number;
+    };
+    session_stats: {
+      average_session_minutes: number;
+      average_tracks_per_session: number;
+      total_sessions: number;
+    };
+    platform_stats: Record<string, number>;
+    top_content: {
+      top_artists: Record<string, number>;
+      top_tracks: Record<string, number>;
+      top_albums: Record<string, number>;
+    };
+  };
+  trends: {
+    daily_stats: {
+      dates: string[];
+      hours_played: number[];
+      tracks_played: number[];
+      skip_rate: number[];
+      offline_rate: number[];
+      shuffle_rate: number[];
+    };
+    rolling_averages: {
+      dates: string[];
+      hours_played: number[];
+      tracks_played: number[];
+      skip_rate: number[];
+      offline_rate: number[];
+      shuffle_rate: number[];
+    };
+  };
+  rawData: unknown[];
+}
+
 interface DashboardProps {
-  data: any; // SpotifyStats type
+  data: SpotifyStats;
   onAddMoreData: (file: File) => void;
   hasExistingData: boolean;
 }
@@ -80,7 +136,17 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
       case 'top-content':
         return <TopContent topContent={stats?.top_content || {}} />;
       case 'full-content':
-        return <FullContent rawData={data.rawData || []} />;
+        return <FullContent rawData={(data.rawData || []) as Array<{
+          ts: string;
+          ms_played: number;
+          master_metadata_track_name: string;
+          master_metadata_album_artist_name: string;
+          master_metadata_album_album_name?: string;
+          platform?: string;
+          shuffle?: boolean;
+          skipped?: boolean;
+          offline?: boolean;
+        }>} />;
       case 'patterns':
         return <ListeningPatterns patterns={stats?.listening_patterns || {}} />;
       case 'trends':

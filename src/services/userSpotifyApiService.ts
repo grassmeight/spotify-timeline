@@ -136,7 +136,22 @@ export const getRecentlyPlayedTracks = async (
 /**
  * Convert Spotify API recent tracks to the format expected by our streaming data analyzer
  */
-export const convertRecentTracksToStreamingData = (tracks: RecentTrack[]): any[] => {
+export const convertRecentTracksToStreamingData = (tracks: RecentTrack[]): Array<{
+  ts: string;
+  ms_played: number;
+  master_metadata_track_name: string;
+  master_metadata_album_artist_name: string;
+  master_metadata_album_album_name: string;
+  spotify_track_uri: string;
+  reason_start: string;
+  reason_end: string;
+  shuffle: null;
+  skipped: boolean;
+  offline: boolean;
+  offline_timestamp: null;
+  incognito_mode: boolean;
+  platform: string;
+}> => {
   return tracks.map(item => ({
     ts: item.played_at,
     ms_played: item.track.duration_ms, // Assume full track was played (limitation of API)
