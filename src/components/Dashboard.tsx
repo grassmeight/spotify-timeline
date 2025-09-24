@@ -1,13 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar, Upload, List, Layers } from 'lucide-react';
+import { Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar, Upload, List } from 'lucide-react';
 import StatsOverview from './StatsOverview';
 import TopContent from './TopContent';
 import ListeningPatterns from './ListeningPatterns';
 import ListeningTrends from './ListeningTrends';
 import BehaviorStats from './BehaviorStats';
 import FullContent from './FullContent';
-import GenreStats from './GenreStats';
-import { isAuthenticated } from '../services/spotifyAuthService';
 
 interface DashboardProps {
   data: any;
@@ -19,7 +17,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
   const [activeTab, setActiveTab] = useState('overview');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const spotifyConnected = isAuthenticated();
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: <BarChart2 size={18} /> },
@@ -28,7 +25,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
     { id: 'patterns', label: 'Listening Patterns', icon: <Activity size={18} /> },
     { id: 'trends', label: 'Listening Trends', icon: <Calendar size={18} /> },
     { id: 'behavior', label: 'Behavior', icon: <Shuffle size={18} /> },
-    { id: 'genres', label: 'Genres', icon: <Layers size={18} /> },
   ];
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -111,7 +107,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
             platformStats={data.stats.platform_stats}
           />
         )}
-        {activeTab === 'genres' && <GenreStats rawData={data.rawData} />}
       </div>
       
       {isDragging && (

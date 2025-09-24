@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Music, LogIn } from 'lucide-react';
 import { getAuthUrl, isAuthenticated, logout } from '../services/spotifyAuthService';
-import { getCurrentUser, SpotifyUser } from '../services/spotifyApiService';
 
 interface SpotifyLoginProps {
   onLoginSuccess: () => void;
 }
 
 const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
-  const [user, setUser] = useState<SpotifyUser | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,9 +35,8 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
       setLoading(true);
       
       if (isAuthenticated()) {
-        // Get user profile
-        const userProfile = await getCurrentUser();
-        setUser(userProfile);
+        // Just mark as authenticated
+        setUser({ display_name: 'Spotify User' });
         onLoginSuccess();
       }
     } catch (error) {
@@ -58,9 +56,8 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
       // The actual token exchange would happen in the backend in a real app
       // For this demo, we'll simulate a successful login
       
-      // Get user profile
-      const userProfile = await getCurrentUser();
-      setUser(userProfile);
+      // Mark as authenticated
+      setUser({ display_name: 'Spotify User' });
       onLoginSuccess();
     } catch (error) {
       console.error('Error handling auth code:', error);

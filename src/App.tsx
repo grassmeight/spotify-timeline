@@ -4,7 +4,6 @@ import Dashboard from './components/Dashboard';
 import FileUploader from './components/FileUploader';
 import SampleData from './data/sampleData';
 import SpotifyConnectButton from './components/SpotifyConnectButton';
-import { isAuthenticated } from './services/spotifyAuthService';
 import { extractSpotifyIdFromUri } from './utils/spotifyUtils';
 
 // Define the interface for our Spotify stats
@@ -70,13 +69,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [rawData, setRawData] = useState<any[]>([]);
   const [isAppending, setIsAppending] = useState<boolean>(false);
-  const [spotifyConnected, setSpotifyConnected] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    // Check if Spotify is connected on component mount
-    setSpotifyConnected(isAuthenticated());
-  }, []);
 
   const processSpotifyData = (jsonData: any) => {
     try {
@@ -502,9 +496,6 @@ function App() {
     setRawData([]);
   };
 
-  const handleSpotifyConnectionChange = (connected: boolean) => {
-    setSpotifyConnected(connected);
-  };
 
   const handleAddMoreDataClick = () => {
     if (fileInputRef.current) {
@@ -532,7 +523,7 @@ function App() {
             <h1 className="text-2xl font-bold">Spotify Stats Explorer</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <SpotifyConnectButton onConnectionChange={handleSpotifyConnectionChange} />
+            <SpotifyConnectButton />
             {data && (
               <>
                 {rawData.length > 0 && (
@@ -588,7 +579,6 @@ function App() {
         ) : (
           <FileUploader 
             onFileSelect={handleFileSelect} 
-            spotifyConnected={spotifyConnected}
           />
         )}
       </main>

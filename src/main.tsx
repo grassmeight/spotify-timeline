@@ -5,13 +5,6 @@ import App from './App';
 import SpotifyCallback from './components/SpotifyCallback';
 import './index.css';
 
-// Initialize Spotify service
-import { ensureToken } from './services/spotifyService';
-
-// Try to ensure we have a valid token on startup
-ensureToken().catch(error => {
-  console.log('No valid Spotify token available, user will need to connect');
-});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

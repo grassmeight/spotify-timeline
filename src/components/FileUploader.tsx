@@ -3,10 +3,9 @@ import { FileUp, HelpCircle, Upload, Music } from 'lucide-react';
 
 interface FileUploaderProps {
   onFileSelect: (file: File | null) => void;
-  spotifyConnected?: boolean;
 }
 
-const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelect, spotifyConnected = false }) => {
+const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelect }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

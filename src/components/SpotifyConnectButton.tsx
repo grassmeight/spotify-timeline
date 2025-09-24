@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Music, LogIn, LogOut, AlertCircle } from 'lucide-react';
 import { isAuthenticated, logout, getAuthUrl } from '../services/spotifyAuthService';
-import { getCurrentUser } from '../services/spotifyApiService';
 
 interface SpotifyConnectButtonProps {
   onConnectionChange?: (connected: boolean) => void;
@@ -26,16 +25,9 @@ const SpotifyConnectButton: React.FC<SpotifyConnectButtonProps> = ({ onConnectio
       setConnected(authenticated);
       
       if (authenticated) {
-        try {
-          // Get user profile
-          const userProfile = await getCurrentUser();
-          setUser(userProfile);
-          if (onConnectionChange) onConnectionChange(true);
-        } catch (userError) {
-          console.error('Error fetching user profile:', userError);
-          // Still consider connected even if profile fetch fails
-          if (onConnectionChange) onConnectionChange(true);
-        }
+        // Just mark as connected, we'll get user data separately
+        setUser({ display_name: 'Spotify User' });
+        if (onConnectionChange) onConnectionChange(true);
       } else {
         if (onConnectionChange) onConnectionChange(false);
       }
