@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Music, LogIn, LogOut, AlertCircle } from 'lucide-react';
-import { isAuthenticated, logout, getAuthUrl } from '../services/spotifyAuthService';
+import { isAuthenticated, logout, getAuthUrl, getCurrentUser, SpotifyUser } from '../services/spotifyAuthService';
 
 interface SpotifyConnectButtonProps {
   onConnectionChange?: (connected: boolean) => void;
@@ -8,7 +8,7 @@ interface SpotifyConnectButtonProps {
 
 const SpotifyConnectButton: React.FC<SpotifyConnectButtonProps> = ({ onConnectionChange }) => {
   const [connected, setConnected] = useState<boolean>(false);
-  const [user, setUser] = useState<any | null>(null);
+  const [user, setUser] = useState<SpotifyUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,9 +25,17 @@ const SpotifyConnectButton: React.FC<SpotifyConnectButtonProps> = ({ onConnectio
       setConnected(authenticated);
       
       if (authenticated) {
-        // Just mark as connected, we'll get user data separately
-        setUser({ display_name: 'Spotify User' });
-        if (onConnectionChange) onConnectionChange(true);
+        try {
+          // Get actual user profile from Spotify
+          const userProfile = await getCurrentUser();
+          setUser(userProfile);
+          if (onConnectionChange) onConnectionChange(true);
+        } catch (userError) {
+          console.error('Error fetching user profile:', userError);
+          // Still mark as connected but without user data
+          setUser(null);
+          if (onConnectionChange) onConnectionChange(true);
+        }
       } else {
         if (onConnectionChange) onConnectionChange(false);
       }
@@ -46,7 +54,12 @@ const SpotifyConnectButton: React.FC<SpotifyConnectButtonProps> = ({ onConnectio
   };
 
   const handleConnect = () => {
-    window.location.href = getAuthUrl();
+    try {
+      window.location.href = getAuthUrl();
+    } catch (error) {
+      console.error('Error getting auth URL:', error);
+      setError(error instanceof Error ? error.message : 'Failed to connect to Spotify');
+    }
   };
 
   const handleDisconnect = () => {

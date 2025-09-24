@@ -74,14 +74,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelect }) => {
             Upload your Spotify streaming history JSON file to visualize your listening habits
           </p>
           
-          {spotifyConnected && (
-            <div className="bg-green-500 bg-opacity-10 border border-green-500 rounded-lg p-3 mb-6 flex items-center">
-              <Music className="text-green-500 mr-2 flex-shrink-0" />
-              <p className="text-green-400 text-sm">
-                Connected to Spotify! Your analysis will include enhanced genre and audio feature data.
-              </p>
-            </div>
-          )}
         </div>
 
         <div 

@@ -1,11 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar, Upload, List } from 'lucide-react';
+import { Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar, Upload, List, Radio } from 'lucide-react';
 import StatsOverview from './StatsOverview';
 import TopContent from './TopContent';
 import ListeningPatterns from './ListeningPatterns';
 import ListeningTrends from './ListeningTrends';
 import BehaviorStats from './BehaviorStats';
 import FullContent from './FullContent';
+import LiveDataStats from './LiveDataStats';
+import { isAuthenticated } from '../services/spotifyAuthService';
 
 interface DashboardProps {
   data: any;
@@ -16,7 +18,9 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingData }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [isDragging, setIsDragging] = useState(false);
+  const [showTooltip, setShowTooltip] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const spotifyConnected = isAuthenticated();
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: <BarChart2 size={18} /> },
@@ -25,6 +29,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
     { id: 'patterns', label: 'Listening Patterns', icon: <Activity size={18} /> },
     { id: 'trends', label: 'Listening Trends', icon: <Calendar size={18} /> },
     { id: 'behavior', label: 'Behavior', icon: <Shuffle size={18} /> },
+    { id: 'live-data', label: 'Live Data', icon: <Radio size={18} />, requiresSpotify: true },
   ];
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -69,20 +74,42 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
       onDrop={handleDrop}
     >
       <div className="flex flex-wrap border-b border-gray-700">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors ${
-              activeTab === tab.id
-                ? 'bg-gray-700 text-green-500 border-b-2 border-green-500'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700'
-            }`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.icon}
-            <span>{tab.label}</span>
-          </button>
-        ))}
+        {tabs.map((tab) => {
+          const isDisabled = tab.requiresSpotify && !spotifyConnected;
+          const isActive = activeTab === tab.id;
+          
+          return (
+            <div
+              key={tab.id}
+              className="relative"
+              onMouseEnter={() => isDisabled && setShowTooltip(tab.id)}
+              onMouseLeave={() => setShowTooltip(null)}
+            >
+              <button
+                className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors ${
+                  isActive
+                    ? 'bg-gray-700 text-green-500 border-b-2 border-green-500'
+                    : isDisabled
+                    ? 'text-gray-600 cursor-not-allowed'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                }`}
+                onClick={() => !isDisabled && setActiveTab(tab.id)}
+                disabled={isDisabled}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+              
+              {/* Tooltip */}
+              {showTooltip === tab.id && isDisabled && (
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg whitespace-nowrap z-50">
+                  Please connect to Spotify to access this tab
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                </div>
+              )}
+            </div>
+          );
+        })}
         
         {/* Add More Data button moved to App.tsx header */}
         <input 
@@ -107,6 +134,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
             platformStats={data.stats.platform_stats}
           />
         )}
+        {activeTab === 'live-data' && <LiveDataStats />}
       </div>
       
       {isDragging && (

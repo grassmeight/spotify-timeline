@@ -1,5 +1,15 @@
 import axios from 'axios';
 
+export interface SpotifyUser {
+  id: string;
+  display_name: string;
+  email?: string;
+  images: { url: string; height?: number; width?: number }[];
+  country: string;
+  product: string;
+  followers: { total: number };
+}
+
 // Spotify API endpoints
 const AUTH_ENDPOINT = 'https://accounts.spotify.com/authorize';
 const TOKEN_ENDPOINT = 'https://accounts.spotify.com/api/token';
@@ -27,6 +37,14 @@ const EXPIRY_TIME_KEY = 'spotify_token_expiry';
  * Generate the authorization URL for Spotify login
  */
 export const getAuthUrl = (): string => {
+  // Check if credentials are available
+  if (!CLIENT_ID || !REDIRECT_URI) {
+    console.error('Missing Spotify credentials. CLIENT_ID or REDIRECT_URI not found.');
+    console.log('CLIENT_ID present:', !!CLIENT_ID);
+    console.log('REDIRECT_URI present:', !!REDIRECT_URI);
+    throw new Error('Spotify credentials not configured. Please check your .env file.');
+  }
+
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     response_type: 'code',
@@ -47,19 +65,33 @@ export const getAccessToken = async (code: string): Promise<{
   expires_in: number;
 }> => {
   try {
+    // Check if credentials are available
+    if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
+      console.error('Missing Spotify credentials for token exchange');
+      console.log('CLIENT_ID present:', !!CLIENT_ID);
+      console.log('CLIENT_SECRET present:', !!CLIENT_SECRET);
+      console.log('REDIRECT_URI present:', !!REDIRECT_URI);
+      throw new Error('Spotify credentials not configured. Please check your .env file.');
+    }
+
     // Form data for token request
     const formData = new URLSearchParams();
     formData.append('grant_type', 'authorization_code');
     formData.append('code', code);
     formData.append('redirect_uri', REDIRECT_URI);
+    formData.append('client_id', CLIENT_ID);
+    formData.append('client_secret', CLIENT_SECRET);
     
-    // Basic auth header
-    const auth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+    console.log('Making token request with:', {
+      grant_type: 'authorization_code',
+      code: code.substring(0, 10) + '...',
+      redirect_uri: REDIRECT_URI,
+      client_id: CLIENT_ID.substring(0, 8) + '...'
+    });
     
     const response = await axios.post(TOKEN_ENDPOINT, formData, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${auth}`
+        'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
 
@@ -71,9 +103,19 @@ export const getAccessToken = async (code: string): Promise<{
     const expiryTime = Date.now() + (response.data.expires_in * 1000);
     localStorage.setItem(EXPIRY_TIME_KEY, expiryTime.toString());
 
+    console.log('Token exchange successful');
     return response.data;
   } catch (error) {
     console.error('Error getting access token:', error);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+      
+      // Handle specific Spotify errors
+      if (error.response.data?.error === 'invalid_grant') {
+        throw new Error('Authorization code has expired or been used. Please try connecting again.');
+      }
+    }
     throw error;
   }
 };
@@ -195,4 +237,93 @@ export const logout = (): void => {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(EXPIRY_TIME_KEY);
+};
+
+/**
+ * Get current user profile from Spotify
+ */
+export const getCurrentUser = async (): Promise<SpotifyUser> => {
+  try {
+    const accessToken = await getCurrentAccessToken();
+    
+    const response = await axios.get('https://api.spotify.com/v1/me', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get user's recently played tracks
+ */
+export const getRecentlyPlayed = async (limit: number = 20) => {
+  try {
+    const accessToken = await getCurrentAccessToken();
+    
+    const response = await axios.get('https://api.spotify.com/v1/me/player/recently-played', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      },
+      params: { limit }
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error getting recently played:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get user's top tracks
+ */
+export const getTopTracks = async (timeRange: string = 'medium_term', limit: number = 20) => {
+  try {
+    const accessToken = await getCurrentAccessToken();
+    
+    const response = await axios.get('https://api.spotify.com/v1/me/top/tracks', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      },
+      params: { 
+        time_range: timeRange,
+        limit 
+      }
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error getting top tracks:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get user's top artists
+ */
+export const getTopArtists = async (timeRange: string = 'medium_term', limit: number = 20) => {
+  try {
+    const accessToken = await getCurrentAccessToken();
+    
+    const response = await axios.get('https://api.spotify.com/v1/me/top/artists', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      },
+      params: { 
+        time_range: timeRange,
+        limit 
+      }
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error getting top artists:', error);
+    throw error;
+  }
 };

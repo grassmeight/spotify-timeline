@@ -1,18 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAccessToken } from '../services/spotifyAuthService';
+import { getAccessToken, isAuthenticated } from '../services/spotifyAuthService';
 
 const SpotifyCallback: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [success, setSuccess] = useState<boolean>(false);
+  const [processed, setProcessed] = useState<boolean>(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     const handleCallback = async () => {
+      // Prevent duplicate processing (React StrictMode issue)
+      if (processed) {
+        return;
+      }
+      setProcessed(true);
+
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       const authError = urlParams.get('error');
+      
+      console.log('Callback URL:', window.location.href);
+      console.log('URL search params:', window.location.search);
+      console.log('Authorization code:', code ? code.substring(0, 10) + '...' : 'null');
+      console.log('Auth error:', authError);
 
       if (authError) {
         setError(`Authentication failed: ${authError}`);
@@ -22,6 +34,15 @@ const SpotifyCallback: React.FC = () => {
       }
 
       if (!code) {
+        // Check if we're already authenticated (might be second StrictMode execution)
+        if (isAuthenticated()) {
+          console.log('Already authenticated, redirecting...');
+          setSuccess(true);
+          setLoading(false);
+          setTimeout(() => navigate('/'), 500);
+          return;
+        }
+        
         setError('No authorization code found');
         setLoading(false);
         setTimeout(() => navigate('/'), 3000);
@@ -29,6 +50,9 @@ const SpotifyCallback: React.FC = () => {
       }
 
       try {
+        // Clear the URL immediately to prevent reuse
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
         // Exchange code for access token
         await getAccessToken(code);
         
@@ -40,7 +64,11 @@ const SpotifyCallback: React.FC = () => {
         setTimeout(() => navigate('/'), 1500);
       } catch (err) {
         console.error('Error during token exchange:', err);
-        if (err instanceof Error) {
+        
+        // Handle specific Spotify errors
+        if (err?.response?.data?.error === 'invalid_grant') {
+          setError('Authorization code expired or already used. Please try connecting again.');
+        } else if (err instanceof Error) {
           setError(`Failed to complete authentication: ${err.message}`);
         } else {
           setError('Failed to complete authentication');
@@ -51,7 +79,7 @@ const SpotifyCallback: React.FC = () => {
     };
 
     handleCallback();
-  }, [navigate]);
+  }, [navigate, processed]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white flex items-center justify-center">

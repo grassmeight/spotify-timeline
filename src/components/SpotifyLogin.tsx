@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Music, LogIn } from 'lucide-react';
-import { getAuthUrl, isAuthenticated, logout } from '../services/spotifyAuthService';
+import { getAuthUrl, isAuthenticated, logout, getAccessToken, getCurrentUser, SpotifyUser } from '../services/spotifyAuthService';
 
 interface SpotifyLoginProps {
   onLoginSuccess: () => void;
 }
 
 const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
-  const [user, setUser] = useState<any | null>(null);
+  const [user, setUser] = useState<SpotifyUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,9 +35,17 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
       setLoading(true);
       
       if (isAuthenticated()) {
-        // Just mark as authenticated
-        setUser({ display_name: 'Spotify User' });
-        onLoginSuccess();
+        try {
+          // Get actual user profile from Spotify
+          const userProfile = await getCurrentUser();
+          setUser(userProfile);
+          onLoginSuccess();
+        } catch (userError) {
+          console.error('Error fetching user profile:', userError);
+          // Still mark as authenticated but without user data
+          setUser(null);
+          onLoginSuccess();
+        }
       }
     } catch (error) {
       console.error('Authentication check failed:', error);
@@ -52,12 +60,20 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
     try {
       setLoading(true);
       
-      // Exchange code for tokens (this is handled in the auth service)
-      // The actual token exchange would happen in the backend in a real app
-      // For this demo, we'll simulate a successful login
+      // Exchange code for access token
+      await getAccessToken(code);
+      console.log('Login process completed successfully');
       
-      // Mark as authenticated
-      setUser({ display_name: 'Spotify User' });
+      // Get user profile after successful token exchange
+      try {
+        const userProfile = await getCurrentUser();
+        setUser(userProfile);
+      } catch (userError) {
+        console.error('Error fetching user profile:', userError);
+        // Still continue with login even if user profile fails
+        setUser(null);
+      }
+      
       onLoginSuccess();
     } catch (error) {
       console.error('Error handling auth code:', error);
