@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar, Upload, List, Layers, Heart } from 'lucide-react';
+import { Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar, Upload, List, Layers } from 'lucide-react';
 import StatsOverview from './StatsOverview';
 import TopContent from './TopContent';
 import ListeningPatterns from './ListeningPatterns';
@@ -7,7 +7,6 @@ import ListeningTrends from './ListeningTrends';
 import BehaviorStats from './BehaviorStats';
 import FullContent from './FullContent';
 import GenreStats from './GenreStats';
-import LikabilityStats from './LikabilityStats';
 import { isAuthenticated } from '../services/spotifyAuthService';
 
 interface DashboardProps {
@@ -30,7 +29,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
     { id: 'trends', label: 'Listening Trends', icon: <Calendar size={18} /> },
     { id: 'behavior', label: 'Behavior', icon: <Shuffle size={18} /> },
     { id: 'genres', label: 'Genres', icon: <Layers size={18} /> },
-    { id: 'likability', label: 'Likability', icon: <Heart size={18} /> },
   ];
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -114,7 +112,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
           />
         )}
         {activeTab === 'genres' && <GenreStats rawData={data.rawData} />}
-        {activeTab === 'likability' && <LikabilityStats rawData={data.rawData} />}
       </div>
       
       {isDragging && (

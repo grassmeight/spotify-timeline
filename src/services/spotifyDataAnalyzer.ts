@@ -30,7 +30,6 @@ export interface AnalyzedTrack {
   uri: string | null;
   genres: string[];
   audioFeatures?: any;
-  likabilityScore: number;
 }
 
 /**
@@ -135,8 +134,7 @@ export const analyzeStreamingHistory = async (historyData: SpotifyStreamingHisto
         totalMsPlayed: track.totalMsPlayed,
         uri: track.uri,
         genres,
-        audioFeatures: analysis?.audioFeatures || null,
-        likabilityScore: analysis?.likabilityScore || 0
+        audioFeatures: analysis?.audioFeatures || null
       };
     });
     

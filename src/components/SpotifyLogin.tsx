@@ -163,7 +163,6 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
           <ul className="text-gray-300 space-y-2">
             <li>• Get accurate genre information for your tracks</li>
             <li>• Access audio features like danceability and energy</li>
-            <li>• Calculate likability scores based on track characteristics</li>
             <li>• Enhance your stats with Spotify's rich metadata</li>
           </ul>
         </div>

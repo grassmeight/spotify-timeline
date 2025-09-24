@@ -86,7 +86,7 @@ const GenreStats: React.FC<GenreStatsProps> = ({ rawData }) => {
         analysis.analyzedTracks.forEach((track: any) => {
           if (track.genres && track.genres.length > 0) {
             // Estimate source based on genre presence
-            if (track.likabilityScore > 0) {
+            if (track.audioFeatures) {
               apiCounts.spotify++;
             } else {
               apiCounts.mock++;

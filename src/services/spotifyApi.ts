@@ -58,7 +58,6 @@ export interface TrackAnalysis {
   track: SpotifyTrack | null;
   audioFeatures: SpotifyAudioFeatures | null;
   genres: string[];
-  likabilityScore: number;
   source: string;
 }
 
@@ -325,38 +324,6 @@ export const getArtistById = async (artistId: string): Promise<SpotifyArtist | n
   }
 };
 
-/**
- * Calculate likability score based on audio features and popularity
- */
-export const calculateLikabilityScore = (track: SpotifyTrack, features: SpotifyAudioFeatures): number => {
-  // Factors that generally make songs more likable:
-  // - Higher valence (positivity/happiness)
-  // - Moderate danceability
-  // - Moderate energy
-  // - Higher popularity
-  // - Not too much speechiness
-  // - Not too much instrumentalness (for general audience)
-  
-  const valenceScore = features.valence * 25; // 0-25 points
-  const danceabilityScore = (1 - Math.abs(features.danceability - 0.7)) * 15; // 0-15 points
-  const energyScore = (1 - Math.abs(features.energy - 0.65)) * 15; // 0-15 points
-  const popularityScore = (track.popularity / 100) * 25; // 0-25 points
-  const speechinessScore = (1 - features.speechiness) * 10; // 0-10 points
-  const instrumentalnessScore = (1 - features.instrumentalness) * 10; // 0-10 points
-  
-  // Sum all scores and round to 2 decimal places
-  const totalScore = parseFloat((
-    valenceScore + 
-    danceabilityScore + 
-    energyScore + 
-    popularityScore + 
-    speechinessScore + 
-    instrumentalnessScore
-  ).toFixed(2));
-  
-  // Ensure score is between 0-100
-  return Math.min(100, Math.max(0, totalScore));
-};
 
 // Mock Spotify API responses for fallback when real API fails
 export const mockSpotifyData = (artist: string, track: string): TrackAnalysis => {
@@ -483,14 +450,10 @@ export const mockSpotifyData = (artist: string, track: string): TrackAnalysis =>
   // Generate audio features
   const mockAudioFeatures = generateAudioFeatures(artist, track);
   
-  // Calculate likability score
-  const likabilityScore = calculateLikabilityScore(mockTrack, mockAudioFeatures);
-  
   return {
     track: mockTrack,
     audioFeatures: mockAudioFeatures,
     genres: mockTrack.artists[0].genres,
-    likabilityScore,
     source: 'mock'
   };
 };
@@ -547,14 +510,10 @@ export const getTrackInfo = async (artist: string, track: string, spotifyId?: st
         }
       }
       
-      // Calculate likability score
-      const likabilityScore = calculateLikabilityScore(trackData, audioFeatures);
-      
       return {
         track: trackData,
         audioFeatures: audioFeatures,
         genres: artistData.genres,
-        likabilityScore,
         source: 'spotify'
       };
     } catch (apiError) {

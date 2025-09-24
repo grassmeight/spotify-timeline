@@ -439,38 +439,6 @@ export const getRecentlyPlayed = async (limit = 50) => {
   }
 };
 
-/**
- * Calculate likability score based on audio features and popularity
- */
-export const calculateLikabilityScore = (track: any, features: any): number => {
-  // Factors that generally make songs more likable:
-  // - Higher valence (positivity/happiness)
-  // - Moderate danceability
-  // - Moderate energy
-  // - Higher popularity
-  // - Not too much speechiness
-  // - Not too much instrumentalness (for general audience)
-  
-  const valenceScore = features.valence * 25; // 0-25 points
-  const danceabilityScore = (1 - Math.abs(features.danceability - 0.7)) * 15; // 0-15 points
-  const energyScore = (1 - Math.abs(features.energy - 0.65)) * 15; // 0-15 points
-  const popularityScore = (track.popularity / 100) * 25; // 0-25 points
-  const speechinessScore = (1 - features.speechiness) * 10; // 0-10 points
-  const instrumentalnessScore = (1 - features.instrumentalness) * 10; // 0-10 points
-  
-  // Sum all scores and round to 2 decimal places
-  const totalScore = parseFloat((
-    valenceScore + 
-    danceabilityScore + 
-    energyScore + 
-    popularityScore + 
-    speechinessScore + 
-    instrumentalnessScore
-  ).toFixed(2));
-  
-  // Ensure score is between 0-100
-  return Math.min(100, Math.max(0, totalScore));
-};
 
 /**
  * Interpret audio features into human-readable descriptions
@@ -670,14 +638,10 @@ export const generateMockData = (artist: string, track: string) => {
   // Generate audio features
   const mockAudioFeatures = generateAudioFeatures(artist, track);
   
-  // Calculate likability score
-  const likabilityScore = calculateLikabilityScore(mockTrack, mockAudioFeatures);
-  
   return {
     track: mockTrack,
     audioFeatures: mockAudioFeatures,
     genres: mockTrack.artists[0].genres,
-    likabilityScore,
     source: 'mock'
   };
 };
@@ -713,14 +677,10 @@ export const getTrackInfo = async (artist: string, track: string, spotifyId?: st
       ]);
       
       if (audioFeatures && artistData) {
-        // Calculate likability score
-        const likabilityScore = calculateLikabilityScore(trackData, audioFeatures);
-        
         return {
           track: trackData,
           audioFeatures,
           genres: artistData.genres,
-          likabilityScore,
           source: 'spotify'
         };
       }
