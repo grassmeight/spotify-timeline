@@ -10,7 +10,7 @@ interface TopContentProps {
 }
 
 const TopContent: React.FC<TopContentProps> = ({ topContent }) => {
-  const { top_artists, top_tracks, top_albums } = topContent;
+  const { top_artists = {}, top_tracks = {}, top_albums = {} } = topContent || {};
 
   // Convert record objects to arrays for easier rendering
   const artistsArray = Object.entries(top_artists).map(([name, count]) => ({ name, count }));

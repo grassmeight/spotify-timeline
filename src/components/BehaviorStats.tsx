@@ -34,13 +34,29 @@ const BehaviorStats: React.FC<BehaviorStatsProps> = ({
   sessionStats,
   platformStats 
 }) => {
+  // Provide default values if data is missing
+  const safeBehaviorStats = {
+    ...behaviorStats,
+    skip_rate: behaviorStats?.skip_rate ?? 0,
+    offline_rate: behaviorStats?.offline_rate ?? 0,
+    shuffle_rate: behaviorStats?.shuffle_rate ?? 0
+  };
+  
+  const safeSessionStats = {
+    ...sessionStats,
+    average_session_minutes: sessionStats?.average_session_minutes ?? 0,
+    average_tracks_per_session: sessionStats?.average_tracks_per_session ?? 0,
+    total_sessions: sessionStats?.total_sessions ?? 0
+  };
+  
+  const safePlatformStats = platformStats || {};
   // Process platform data
-  const platforms = Object.entries(platformStats)
+  const platforms = Object.entries(safePlatformStats)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
   
   const platformLabels = platforms.map(([name]) => name);
-  const platformValues = platforms.map(([_, value]) => value);
+  const platformValues = platforms.map(([, value]) => value);
   const totalPlatformPlays = platformValues.reduce((sum, value) => sum + value, 0);
   
   // Platform chart data
@@ -124,11 +140,11 @@ const BehaviorStats: React.FC<BehaviorStatsProps> = ({
             </div>
             <div>
               <h3 className="font-bold">Shuffle Mode</h3>
-              <p className="text-2xl font-bold">{behaviorStats.shuffle_rate}%</p>
+              <p className="text-2xl font-bold">{safeBehaviorStats.shuffle_rate}%</p>
             </div>
           </div>
           <p className="text-gray-400 mt-auto">
-            {behaviorStats.shuffle_rate > 50 
+            {safeBehaviorStats.shuffle_rate > 50 
               ? "You prefer to mix things up with shuffle mode." 
               : "You usually listen to albums and playlists in order."}
           </p>
@@ -141,11 +157,11 @@ const BehaviorStats: React.FC<BehaviorStatsProps> = ({
             </div>
             <div>
               <h3 className="font-bold">Offline Listening</h3>
-              <p className="text-2xl font-bold">{behaviorStats.offline_rate}%</p>
+              <p className="text-2xl font-bold">{safeBehaviorStats.offline_rate}%</p>
             </div>
           </div>
           <p className="text-gray-400 mt-auto">
-            {behaviorStats.offline_rate > 20 
+            {safeBehaviorStats.offline_rate > 20 
               ? "You frequently listen to downloaded content offline." 
               : "You mostly stream music while connected to the internet."}
           </p>
@@ -158,11 +174,11 @@ const BehaviorStats: React.FC<BehaviorStatsProps> = ({
             </div>
             <div>
               <h3 className="font-bold">Skip Rate</h3>
-              <p className="text-2xl font-bold">{behaviorStats.skip_rate}%</p>
+              <p className="text-2xl font-bold">{safeBehaviorStats.skip_rate}%</p>
             </div>
           </div>
           <p className="text-gray-400 mt-auto">
-            {behaviorStats.skip_rate > 30 
+            {safeBehaviorStats.skip_rate > 30 
               ? "You frequently skip tracks to find what you want to hear." 
               : "You tend to listen to tracks all the way through."}
           </p>
@@ -206,12 +222,12 @@ const BehaviorStats: React.FC<BehaviorStatsProps> = ({
       <div className="bg-gray-700 rounded-lg p-6">
         <h3 className="text-xl font-bold mb-4">Understanding Your Behavior</h3>
         <p className="text-gray-300 mb-4">
-          Your listening behavior reveals how you interact with Spotify. A high skip rate ({behaviorStats.skip_rate}%) 
-          might indicate you're selective about what you listen to, while your shuffle usage ({behaviorStats.shuffle_rate}%) 
+          Your listening behavior reveals how you interact with Spotify. A high skip rate ({safeBehaviorStats.skip_rate}%) 
+          might indicate you're selective about what you listen to, while your shuffle usage ({safeBehaviorStats.shuffle_rate}%) 
           shows whether you prefer curated or randomized listening.
         </p>
         <p className="text-gray-300 mb-4">
-          Offline listening ({behaviorStats.offline_rate}%) indicates how often you listen without an internet connection, 
+          Offline listening ({safeBehaviorStats.offline_rate}%) indicates how often you listen without an internet connection, 
           which might correlate with commuting or travel.
         </p>
         <p className="text-gray-300">

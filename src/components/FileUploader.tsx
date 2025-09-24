@@ -1,5 +1,5 @@
 import React, { useState, useRef, DragEvent } from 'react';
-import { FileUp, HelpCircle, Upload, Music } from 'lucide-react';
+import { FileUp, HelpCircle, Upload, Music, BarChart3 } from 'lucide-react';
 
 interface FileUploaderProps {
   onFileSelect: (file: File | null) => void;
@@ -48,105 +48,134 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelect }) => {
     }
   };
 
-  const handleUploadClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+  const handleUpload = () => {
+    if (selectedFile) {
+      onFileSelect(selectedFile);
     }
   };
 
-  const handleProcessFile = () => {
-    onFileSelect(selectedFile);
+  const handleLoadSample = () => {
+    onFileSelect(null); // null triggers sample data loading
   };
 
-  const handleLoadSample = () => {
-    onFileSelect(null);
+  const handleReset = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-[70vh] text-center">
-      <div className="bg-gray-800 p-8 rounded-xl shadow-2xl max-w-2xl w-full">
-        <div className="mb-8">
-          <div className="bg-green-500 bg-opacity-20 p-4 rounded-full inline-block mb-4">
-            <FileUp size={48} className="text-green-500" />
+    <div className="max-w-4xl mx-auto">
+      <div className="bg-gray-800 rounded-xl p-8 shadow-lg">
+        <div className="text-center mb-8">
+          <div className="bg-green-500 p-4 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+            <Music className="h-10 w-10 text-white" />
           </div>
-          <h2 className="text-3xl font-bold mb-2">Upload Your Spotify Data</h2>
-          <p className="text-gray-400 mb-6">
-            Upload your Spotify streaming history JSON file to visualize your listening habits
+          <h2 className="text-3xl font-bold mb-4">Upload Your Spotify Data</h2>
+          <p className="text-gray-400 text-lg">
+            Upload your Spotify streaming history JSON file to analyze your music taste and discover insights.
           </p>
-          
         </div>
 
-        <div 
-          className={`border-2 border-dashed rounded-lg p-8 mb-6 transition-colors ${
+        {/* File Drop Zone */}
+        <div
+          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
             isDragging 
               ? 'border-green-500 bg-green-500 bg-opacity-10' 
               : selectedFile 
-                ? 'border-blue-500 bg-blue-500 bg-opacity-10' 
-                : 'border-gray-600 hover:border-gray-500'
+              ? 'border-green-400 bg-green-400 bg-opacity-5'
+              : 'border-gray-600 hover:border-gray-500'
           }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <input 
-            type="file" 
-            ref={fileInputRef}
-            className="hidden" 
-            accept=".json" 
-            onChange={handleFileInputChange}
-          />
-          
           {selectedFile ? (
-            <div className="text-center">
-              <div className="bg-blue-500 bg-opacity-20 p-3 rounded-full inline-block mb-3">
-                <FileUp size={32} className="text-blue-400" />
+            <div className="space-y-4">
+              <FileUp className="h-16 w-16 text-green-400 mx-auto" />
+              <div>
+                <h3 className="text-xl font-bold text-green-400 mb-2">File Selected!</h3>
+                <p className="text-gray-300 font-medium">{selectedFile.name}</p>
+                <p className="text-gray-400 text-sm">
+                  Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                </p>
               </div>
-              <p className="text-lg font-medium mb-2">{selectedFile.name}</p>
-              <p className="text-gray-400 mb-4">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-              <button
-                onClick={handleProcessFile}
-                className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-6 rounded-lg font-medium transition-colors"
-              >
-                Process File
-              </button>
+              <div className="flex justify-center space-x-4">
+                <button
+                  onClick={handleUpload}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  Process File
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  Choose Different File
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="text-center">
-              <div className="bg-gray-700 p-3 rounded-full inline-block mb-3">
-                <Upload size={32} className="text-gray-400" />
+            <div className="space-y-4">
+              <Upload className="h-16 w-16 text-gray-400 mx-auto" />
+              <div>
+                <h3 className="text-xl font-bold mb-2">Drop your Spotify data file here</h3>
+                <p className="text-gray-400 mb-4">or click to browse your files</p>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  Choose File
+                </button>
               </div>
-              <p className="text-lg font-medium mb-2">Drag & Drop your Spotify data file here</p>
-              <p className="text-gray-400 mb-4">or</p>
-              <button
-                onClick={handleUploadClick}
-                className="bg-gray-700 hover:bg-gray-600 text-white py-2 px-6 rounded-lg font-medium transition-colors"
-              >
-                Browse Files
-              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleFileInputChange}
+                className="hidden"
+              />
             </div>
           )}
         </div>
 
-        <button
-          onClick={handleLoadSample}
-          className="w-full bg-green-500 hover:bg-green-600 text-white py-3 px-6 rounded-lg font-medium transition-colors mb-6 flex items-center justify-center"
-        >
-          <FileUp size={20} className="mr-2" />
-          Load Sample Data Instead
-        </button>
+        {/* Action Buttons */}
+        <div className="flex justify-center space-x-4 mt-8">
+          <button
+            onClick={handleLoadSample}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center space-x-2"
+          >
+            <BarChart3 className="h-5 w-5" />
+            <span>Try Sample Data</span>
+          </button>
+        </div>
 
-        <div className="bg-gray-700 bg-opacity-50 p-4 rounded-lg text-left">
-          <div className="flex items-start mb-2">
-            <HelpCircle size={20} className="text-gray-400 mr-2 mt-1 flex-shrink-0" />
-            <h3 className="font-semibold">How to get your Spotify data:</h3>
-          </div>
-          <ol className="list-decimal list-inside text-gray-400 space-y-2 ml-6">
-            <li>Go to your <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">Spotify Privacy Settings</a></li>
-            <li>Request your data under "Download your data"</li>
-            <li>Wait for the email from Spotify (can take up to 30 days)</li>
+        {/* Instructions */}
+        <div className="mt-8 bg-gray-700 p-6 rounded-lg">
+          <h3 className="font-bold mb-4 flex items-center">
+            <HelpCircle className="h-5 w-5 text-yellow-400 mr-2" />
+            How to Get Your Spotify Data
+          </h3>
+          <ol className="list-decimal list-inside space-y-2 text-gray-300">
+            <li>Go to your Spotify Account Privacy Settings</li>
+            <li>Scroll down to "Download your data" and click "Request"</li>
+            <li>Select "Extended streaming history" for the most comprehensive data</li>
+            <li>Wait for Spotify to email you the download link (can take up to 30 days)</li>
             <li>Download and extract the ZIP file</li>
-            <li>Upload the "StreamingHistory*.json" file here</li>
+            <li>Upload the JSON file (typically named "Streaming_History_Audio_*.json")</li>
           </ol>
+          <p className="text-sm text-gray-400 mt-4">
+            💡 Tip: The extended streaming history provides much more detailed data than the basic export.
+          </p>
+        </div>
+
+        {/* Sample Data Info */}
+        <div className="mt-6 bg-blue-500 bg-opacity-20 border border-blue-500 rounded-lg p-4">
+          <h3 className="font-semibold text-blue-200 mb-2">Don't have your data yet?</h3>
+          <p className="text-blue-300 text-sm">
+            Try the sample data to explore all the features while you wait for your Spotify data export.
+          </p>
         </div>
       </div>
     </div>

@@ -21,7 +21,21 @@ interface StatsOverviewProps {
 }
 
 const StatsOverview: React.FC<StatsOverviewProps> = ({ data }) => {
-  const { total_stats, session_stats } = data;
+  // Handle data structure compatibility - support both direct stats and nested stats
+  const total_stats = data?.total_stats || data?.stats?.total_stats;
+  const session_stats = data?.session_stats || data?.stats?.session_stats;
+  
+  // If no data available, show loading or empty state
+  if (!total_stats || !session_stats) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-green-500 mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading statistics...</p>
+        </div>
+      </div>
+    );
+  }
   
   const statCards = [
     {

@@ -31,22 +31,32 @@ interface ListeningPatternsProps {
 }
 
 const ListeningPatterns: React.FC<ListeningPatternsProps> = ({ patterns }) => {
+  // Provide safe defaults
+  const safePatterns = {
+    peak_hour: 12,
+    peak_day: 'Monday',
+    hourly_distribution: {},
+    daily_distribution: {},
+    monthly_distribution: {},
+    ...patterns
+  };
+
   // Process hourly distribution data
   const hourLabels = Array.from({ length: 24 }, (_, i) => `${i}:00`);
   const hourData = hourLabels.map(hour => {
     const hourNum = parseInt(hour);
-    return patterns.hourly_distribution[hourNum] || 0;
+    return safePatterns.hourly_distribution[hourNum] || 0;
   });
 
   // Process daily distribution data
   const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const dayData = dayOrder.map(day => patterns.daily_distribution[day] || 0);
+  const dayData = dayOrder.map(day => safePatterns.daily_distribution[day] || 0);
 
   // Process monthly distribution data
   const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const monthData = monthLabels.map((_, index) => {
     const monthNum = index + 1;
-    return patterns.monthly_distribution[monthNum] || 0;
+    return safePatterns.monthly_distribution[monthNum] || 0;
   });
 
   // Chart options
@@ -137,7 +147,7 @@ const ListeningPatterns: React.FC<ListeningPatternsProps> = ({ patterns }) => {
             <Bar data={hourlyChartData} options={chartOptions} />
           </div>
           <p className="mt-4 text-gray-300">
-            You listen to music most frequently at {patterns.peak_hour}:00.
+            You listen to music most frequently at {safePatterns.peak_hour}:00.
           </p>
         </div>
         
@@ -147,7 +157,7 @@ const ListeningPatterns: React.FC<ListeningPatternsProps> = ({ patterns }) => {
             <Bar data={dailyChartData} options={chartOptions} />
           </div>
           <p className="mt-4 text-gray-300">
-            {patterns.peak_day} is your most active listening day.
+            {safePatterns.peak_day} is your most active listening day.
           </p>
         </div>
       </div>

@@ -1,10 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileUp, Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar } from 'lucide-react';
+import { FileUp, Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import FileUploader from './components/FileUploader';
 import SampleData from './data/sampleData';
 import SpotifyConnectButton from './components/SpotifyConnectButton';
 import { extractSpotifyIdFromUri } from './utils/spotifyUtils';
+import { 
+  getActiveProfileId, 
+  getActiveProfile, 
+  updateProfile, 
+  setActiveProfile,
+  createProfile,
+  getProfileSummaries,
+  deleteProfile,
+  getStorageStats
+} from './services/indexedDBProfileService';
 
 // Define the interface for our Spotify stats
 interface SpotifyStats {
@@ -70,7 +80,85 @@ function App() {
   const [rawData, setRawData] = useState<any[]>([]);
   const [isAppending, setIsAppending] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Profile management state
+  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [showCreateProfile, setShowCreateProfile] = useState(false);
+  const [newProfileName, setNewProfileName] = useState('');
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [storageStats, setStorageStats] = useState<any>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Profile management with multi-profile support
+  useEffect(() => {
+    const initializeProfiles = async () => {
+      await loadProfiles();
+      
+      // Create or load default profile in the background
+      let profileId = getActiveProfileId();
+      if (!profileId) {
+        const defaultProfile = await createProfile('Personal Account');
+        setActiveProfile(defaultProfile.id);
+        profileId = defaultProfile.id;
+        setCurrentProfileId(profileId);
+      } else {
+        setCurrentProfileId(profileId);
+      }
+      
+      await loadProfileData(profileId);
+    };
+    
+    initializeProfiles();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowProfileDropdown(false);
+        setShowCreateProfile(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const loadProfiles = async () => {
+    const allProfiles = await getProfileSummaries();
+    setProfiles(allProfiles);
+    // Also update storage stats
+    const stats = await getStorageStats();
+    setStorageStats(stats);
+  };
+
+  const loadProfileData = async (profileId: string) => {
+    // Set the active profile first
+    setActiveProfile(profileId);
+    const activeProfile = await getActiveProfile();
+    if (activeProfile?.streamingData) {
+      // Check if data is already processed (has stats property) or raw JSON
+      if (Array.isArray(activeProfile.streamingData)) {
+        // Raw JSON data - process it
+        const processedData = processSpotifyData(activeProfile.streamingData);
+        setData(processedData);
+        setRawData(activeProfile.streamingData);
+      } else if (activeProfile.streamingData.stats) {
+        // Already processed data - use directly
+        setData(activeProfile.streamingData);
+        setRawData(activeProfile.streamingData.rawData || []);
+      }
+    } else {
+      // Load sample data for first-time users to showcase features
+      const sampleDataWithRaw = {
+        ...SampleData,
+        rawData: [] // Add empty raw data for sample data
+      };
+      setData(sampleDataWithRaw);
+      updateProfile(profileId, { streamingData: sampleDataWithRaw });
+    }
+  };
 
   const processSpotifyData = (jsonData: any) => {
     try {
@@ -408,13 +496,20 @@ function App() {
       
       if (!file) {
         // Load sample data if no file is provided
-        setTimeout(() => {
+        setTimeout(async () => {
           const sampleDataWithRaw = {
             ...SampleData,
             rawData: [] // Add empty raw data for sample data
           };
           setData(sampleDataWithRaw);
           setRawData([]); // Reset raw data since we're using sample data
+          
+          // Save sample data to current profile
+          if (currentProfileId) {
+            await updateProfile(currentProfileId, { streamingData: sampleDataWithRaw });
+            await loadProfiles(); // Refresh profile summaries
+          }
+          
           setLoading(false);
         }, 1500);
         return;
@@ -430,7 +525,7 @@ function App() {
       // Read the file
       const reader = new FileReader();
       
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const content = e.target?.result as string;
           const jsonData = JSON.parse(content);
@@ -456,6 +551,23 @@ function App() {
             setRawData(jsonData);
             const processedData = processSpotifyData(jsonData);
             setData(processedData);
+          }
+          
+          // Save processed data to current profile
+          if (currentProfileId) {
+            try {
+              const dataToSave = append ? processSpotifyData(combinedData) : processSpotifyData(jsonData);
+              await updateProfile(currentProfileId, { streamingData: dataToSave });
+              await loadProfiles(); // Refresh profile summaries
+            } catch (storageError) {
+              if (storageError instanceof Error) {
+                setError(storageError.message);
+              } else {
+                setError('Failed to save data');
+              }
+              console.error('Storage error:', storageError);
+              return; // Don't continue processing if save failed
+            }
           }
         } catch (err) {
           if (err instanceof Error) {
@@ -490,12 +602,60 @@ function App() {
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     setData(null);
     setError(null);
     setRawData([]);
+    // Clear current profile data
+    if (currentProfileId) {
+      await updateProfile(currentProfileId, { streamingData: null });
+      await loadProfiles(); // Refresh profile summaries
+    }
   };
 
+  const handleSwitchProfile = async (profileId: string) => {
+    setActiveProfile(profileId);
+    setCurrentProfileId(profileId);
+    setShowProfileDropdown(false);
+    await loadProfileData(profileId);
+  };
+
+  const handleCreateProfile = async () => {
+    if (!newProfileName.trim()) return;
+    
+    const newProfile = await createProfile(newProfileName.trim());
+    setActiveProfile(newProfile.id);
+    setCurrentProfileId(newProfile.id);
+    setNewProfileName('');
+    setShowCreateProfile(false);
+    setShowProfileDropdown(false);
+    await loadProfiles();
+    await loadProfileData(newProfile.id);
+  };
+
+  const handleDeleteProfile = async (profileId: string) => {
+    if (profiles.length <= 1) {
+      alert("You can't delete the last profile. Create another profile first.");
+      return;
+    }
+    
+    if (window.confirm('Are you sure you want to delete this profile and all its data?')) {
+      await deleteProfile(profileId);
+      await loadProfiles();
+      
+      // If deleted profile was active, switch to another one
+      if (currentProfileId === profileId) {
+        const remaining = await getProfileSummaries();
+        if (remaining.length > 0) {
+          await handleSwitchProfile(remaining[0].id);
+        }
+      }
+    }
+  };
+
+  const getCurrentProfile = () => {
+    return profiles.find(p => p.id === currentProfileId);
+  };
 
   const handleAddMoreDataClick = () => {
     if (fileInputRef.current) {
@@ -518,12 +678,135 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
       <header className="bg-black bg-opacity-40 p-6 shadow-lg">
         <div className="container mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-4">
             <Music className="h-8 w-8 text-green-500" />
             <h1 className="text-2xl font-bold">Spotify Stats Explorer</h1>
+            
+            {/* Profile Selector */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg transition-colors"
+              >
+                <User className="h-4 w-4" />
+                <span className="font-medium">{getCurrentProfile()?.name || 'Select Profile'}</span>
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              
+              {showProfileDropdown && (
+                <div className="absolute top-full left-0 mt-2 w-64 bg-gray-800 rounded-lg shadow-xl border border-gray-600 z-50">
+                  <div className="p-2">
+                    {profiles.map((profile) => (
+                      <div key={profile.id} className="flex items-center justify-between p-2 hover:bg-gray-700 rounded-md">
+                        <button
+                          onClick={() => handleSwitchProfile(profile.id)}
+                          className={`flex-1 text-left ${profile.id === currentProfileId ? 'text-green-400 font-medium' : 'text-gray-300'}`}
+                        >
+                          <div className="font-medium">{profile.name}</div>
+                          <div className="text-xs text-gray-400">
+                            {(profile.totalTracks || 0).toLocaleString()} tracks
+                          </div>
+                        </button>
+                        {profiles.length > 1 && (
+                          <button
+                            onClick={() => handleDeleteProfile(profile.id)}
+                            className="ml-2 p-1 text-gray-400 hover:text-red-400 transition-colors"
+                            title="Delete Profile"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    
+                    <div className="border-t border-gray-600 mt-2 pt-2">
+                      {/* Storage Usage Indicator */}
+                      {storageStats && (
+                        <div className="mb-3 p-2 bg-gray-900 rounded-md">
+                          <div className="flex justify-between text-xs text-gray-400 mb-1">
+                            <span>Storage Used</span>
+                            <span>{storageStats.usagePercent}%</span>
+                          </div>
+                          <div className="w-full bg-gray-700 rounded-full h-1.5">
+                            <div 
+                              className={`h-1.5 rounded-full ${
+                                storageStats.usagePercent > 90 ? 'bg-red-500' : 
+                                storageStats.usagePercent > 70 ? 'bg-yellow-500' : 'bg-green-500'
+                              }`}
+                              style={{ width: `${Math.min(storageStats.usagePercent, 100)}%` }}
+                            ></div>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {storageStats.totalSizeMB}MB used • {storageStats.limitGB}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {showCreateProfile ? (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={newProfileName}
+                            onChange={(e) => setNewProfileName(e.target.value)}
+                            placeholder="Profile name..."
+                            className="w-full bg-gray-700 text-white p-2 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                            onKeyPress={(e) => e.key === 'Enter' && handleCreateProfile()}
+                            autoFocus
+                          />
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={handleCreateProfile}
+                              className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                            >
+                              Create
+                            </button>
+                            <button
+                              onClick={() => { setShowCreateProfile(false); setNewProfileName(''); }}
+                              className="flex-1 bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowCreateProfile(true)}
+                          className="w-full flex items-center space-x-2 p-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>Create New Profile</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {data && (
+              <div className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded">
+                Data Saved ✓
+              </div>
+            )}
           </div>
+          
           <div className="flex items-center space-x-4">
             <SpotifyConnectButton />
+            {data && (
+              <button
+                onClick={() => {
+                  const confirmed = window.confirm(`Clear all data from "${getCurrentProfile()?.name}" profile and start fresh?`);
+                  if (confirmed) {
+                    handleReset();
+                  }
+                }}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+                title="Clear current profile data"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Clear Data</span>
+              </button>
+            )}
             {data && (
               <>
                 {rawData.length > 0 && (

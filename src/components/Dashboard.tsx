@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Music, Clock, User, Disc, BarChart2, Activity, Shuffle, Wifi, Calendar, Upload, List, Radio } from 'lucide-react';
+import { Music, BarChart2, Activity, Calendar, Upload, List, Radio, Shuffle } from 'lucide-react';
 import StatsOverview from './StatsOverview';
 import TopContent from './TopContent';
 import ListeningPatterns from './ListeningPatterns';
@@ -10,7 +10,7 @@ import LiveDataStats from './LiveDataStats';
 import { isAuthenticated } from '../services/spotifyAuthService';
 
 interface DashboardProps {
-  data: any;
+  data: any; // SpotifyStats type
   onAddMoreData: (file: File) => void;
   hasExistingData: boolean;
 }
@@ -48,11 +48,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       if (file.name.endsWith('.json')) {
         onAddMoreData(file);
+      } else {
+        alert('Please drop a JSON file.');
       }
     }
   };
@@ -62,96 +64,129 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onAddMoreData, hasExistingD
       const file = e.target.files[0];
       if (file.name.endsWith('.json')) {
         onAddMoreData(file);
+      } else {
+        alert('Please select a JSON file.');
       }
     }
   };
 
+  const renderTabContent = () => {
+    // Handle data structure compatibility
+    const stats = data?.stats || data; // Support both old and new data structures
+    
+    switch (activeTab) {
+      case 'overview':
+        return <StatsOverview data={stats} />;
+      case 'top-content':
+        return <TopContent topContent={stats?.top_content || {}} />;
+      case 'full-content':
+        return <FullContent rawData={data.rawData || []} />;
+      case 'patterns':
+        return <ListeningPatterns patterns={stats?.listening_patterns || {}} />;
+      case 'trends':
+        return <ListeningTrends trends={data?.trends || {}} />;
+      case 'behavior':
+        return <BehaviorStats 
+          behaviorStats={stats?.behavior_stats || {}} 
+          sessionStats={stats?.session_stats || {}}
+          platformStats={stats?.platform_stats || {}}
+        />;
+      case 'live-data':
+        return <LiveDataStats />;
+      default:
+        return <StatsOverview data={stats} />;
+    }
+  };
+
   return (
-    <div 
-      className="bg-gray-800 rounded-xl shadow-xl overflow-hidden"
+    <div
+      className="space-y-6"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="flex flex-wrap border-b border-gray-700">
+      {/* Tab Navigation */}
+      <div className="flex flex-wrap justify-center gap-2 bg-gray-800 p-4 rounded-lg">
         {tabs.map((tab) => {
           const isDisabled = tab.requiresSpotify && !spotifyConnected;
-          const isActive = activeTab === tab.id;
           
           return (
-            <div
-              key={tab.id}
-              className="relative"
-              onMouseEnter={() => isDisabled && setShowTooltip(tab.id)}
-              onMouseLeave={() => setShowTooltip(null)}
-            >
+            <div key={tab.id} className="relative">
               <button
-                className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors ${
-                  isActive
-                    ? 'bg-gray-700 text-green-500 border-b-2 border-green-500'
-                    : isDisabled
-                    ? 'text-gray-600 cursor-not-allowed'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                }`}
                 onClick={() => !isDisabled && setActiveTab(tab.id)}
                 disabled={isDisabled}
+                onMouseEnter={() => isDisabled && setShowTooltip(tab.id)}
+                onMouseLeave={() => setShowTooltip(null)}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  activeTab === tab.id && !isDisabled
+                    ? 'bg-green-600 text-white shadow-lg'
+                    : isDisabled
+                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+                }`}
               >
                 {tab.icon}
-                <span>{tab.label}</span>
+                <span className="font-medium">{tab.label}</span>
               </button>
               
-              {/* Tooltip */}
-              {showTooltip === tab.id && isDisabled && (
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg whitespace-nowrap z-50">
+              {isDisabled && showTooltip === tab.id && (
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-10 whitespace-nowrap">
                   Please connect to Spotify to access this tab
-                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                 </div>
               )}
             </div>
           );
         })}
-        
-        {/* Add More Data button moved to App.tsx header */}
-        <input 
-          type="file" 
-          ref={fileInputRef}
-          className="hidden" 
-          accept=".json" 
-          onChange={handleFileInputChange}
-        />
       </div>
 
-      <div className="p-6">
-        {activeTab === 'overview' && <StatsOverview data={data.stats} />}
-        {activeTab === 'top-content' && <TopContent topContent={data.stats.top_content} />}
-        {activeTab === 'full-content' && <FullContent rawData={data.rawData} />}
-        {activeTab === 'patterns' && <ListeningPatterns patterns={data.stats.listening_patterns} />}
-        {activeTab === 'trends' && <ListeningTrends trends={data.trends} />}
-        {activeTab === 'behavior' && (
-          <BehaviorStats 
-            behaviorStats={data.stats.behavior_stats} 
-            sessionStats={data.stats.session_stats}
-            platformStats={data.stats.platform_stats}
-          />
-        )}
-        {activeTab === 'live-data' && <LiveDataStats />}
-      </div>
-      
-      {isDragging && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-gray-800 p-8 rounded-xl border-2 border-dashed border-green-500 max-w-md w-full text-center">
-            <div className="mx-auto mb-4 text-green-500">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
+      {/* Add More Data Section */}
+      {hasExistingData && (
+        <div className="bg-gray-800 p-4 rounded-lg border-2 border-dashed border-gray-600 hover:border-gray-500 transition-colors">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Upload className="h-5 w-5 text-gray-400" />
+              <div>
+                <h3 className="font-medium text-gray-300">Add More Data</h3>
+                <p className="text-sm text-gray-400">
+                  Drag and drop another JSON file here or click to browse
+                </p>
+              </div>
             </div>
-            <h3 className="text-xl font-bold mb-2">Drop to Add More Data</h3>
-            <p className="text-gray-400">Release to add this file to your existing data</p>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              Browse Files
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleFileInputChange}
+              className="hidden"
+            />
           </div>
         </div>
       )}
+
+      {/* Drag Overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-8 rounded-xl shadow-2xl">
+            <div className="flex flex-col items-center">
+              <Upload className="h-16 w-16 text-green-500 mb-4" />
+              <h3 className="text-xl font-bold text-white mb-2">Drop your JSON file here</h3>
+              <p className="text-gray-400">It will be merged with your existing data</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab Content */}
+      <div className="bg-gray-800 rounded-xl p-6 shadow-lg">
+        {renderTabContent()}
+      </div>
     </div>
   );
 };

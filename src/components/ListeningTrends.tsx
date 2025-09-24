@@ -49,7 +49,28 @@ const ListeningTrends: React.FC<ListeningTrendsProps> = ({ trends }) => {
   const [showRollingAverage, setShowRollingAverage] = useState(true);
   const [metric, setMetric] = useState<'hours_played' | 'tracks_played'>('hours_played');
   
-  const data = showRollingAverage ? trends.rolling_averages : trends.daily_stats;
+  // Provide safe defaults
+  const safeTrends = {
+    daily_stats: {
+      dates: [],
+      hours_played: [],
+      tracks_played: [],
+      skip_rate: [],
+      offline_rate: [],
+      shuffle_rate: []
+    },
+    rolling_averages: {
+      dates: [],
+      hours_played: [],
+      tracks_played: [],
+      skip_rate: [],
+      offline_rate: [],
+      shuffle_rate: []
+    },
+    ...trends
+  };
+  
+  const data = showRollingAverage ? safeTrends.rolling_averages : safeTrends.daily_stats;
   
   // Format dates for display
   const formatDate = (dateStr: string) => {
