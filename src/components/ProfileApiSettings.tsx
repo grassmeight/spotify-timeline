@@ -96,8 +96,8 @@ const ProfileApiSettings: React.FC<ProfileApiSettingsProps> = ({ profileId, onDa
   };
 
   const handleAuthorizeApp = () => {
-    // For Electron apps, use localhost callback
-    const redirectUri = 'http://localhost:8888/callback';
+    // Use environment variable for redirect URI
+    const redirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI;
     const authUrl = getUserOAuthUrl(credentials, redirectUri);
     
     // Save state for when they return
@@ -114,7 +114,7 @@ const ProfileApiSettings: React.FC<ProfileApiSettingsProps> = ({ profileId, onDa
       
       if (savedProfileId === profileId && savedCredentials) {
         const creds = JSON.parse(savedCredentials);
-        const redirectUri = 'http://localhost:8888/callback';
+        const redirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI;
         
         const tokenData = await getUserAccessToken(creds, code, redirectUri);
         
@@ -250,7 +250,7 @@ const ProfileApiSettings: React.FC<ProfileApiSettingsProps> = ({ profileId, onDa
             <ol className="list-decimal list-inside space-y-1 text-blue-200">
               <li>Go to <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline inline-flex items-center">Spotify Developer Dashboard <ExternalLink className="h-3 w-3 ml-1" /></a></li>
               <li>Create a new app (or use an existing one)</li>
-              <li>Add "http://localhost:8888/callback" to Redirect URIs in your app settings</li>
+              <li>Add "http://localhost:5173/callback" to Redirect URIs in your app settings</li>
               <li>Copy your Client ID and Client Secret</li>
             </ol>
           </div>
