@@ -42,9 +42,10 @@ const SpotifyConnectButton: React.FC<SpotifyConnectButtonProps> = ({ onConnectio
   }, [checkConnection]);
 
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     try {
-      window.location.href = getAuthUrl();
+      const authUrl = await getAuthUrl();
+      window.location.href = authUrl;
     } catch (error) {
       console.error('Error getting auth URL:', error);
       setError(error instanceof Error ? error.message : 'Failed to connect to Spotify');

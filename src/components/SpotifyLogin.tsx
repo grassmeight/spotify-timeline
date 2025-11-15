@@ -83,9 +83,15 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess }) => {
     }
   }, [checkAuthentication, handleAuthCode]);
 
-  const handleLogin = () => {
-    // Redirect to Spotify authorization page
-    window.location.href = getAuthUrl();
+  const handleLogin = async () => {
+    // Redirect to Spotify authorization page with PKCE
+    try {
+      const authUrl = await getAuthUrl();
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('Error initiating login:', error);
+      setError('Failed to initiate Spotify login. Please try again.');
+    }
   };
 
   const handleLogout = () => {
